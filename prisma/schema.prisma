@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Teacher {
+  id       String    @id @default(cuid())
+  name     String
+  email    String?
+  routines Routine[]
+}
+
+model Genre {
+  id       String    @id @default(cuid())
+  name     String
+  color    String
+  routines Routine[]
+}
+
+model Dancer {
+  id        String    @id @default(cuid())
+  name      String
+  email     String?
+  level     String?
+  genres    String[]
+  age       Int?
+  avatar    String?
+  birthday  String?
+  classes   String[]
+  firstName String?
+  gender    String?
+  lastName  String?
+  phone     String?
+  routines  Routine[] @relation("DancerToRoutine")
+}
+
+model Room {
+  id        String             @id @default(cuid())
+  name      String
+  isActive  Boolean            @default(true)
+  capacity  Int?
+  equipment String[]
+  schedules ScheduledRoutine[]
+}
+
+model Routine {
+  id        String             @id @default(cuid())
+  songTitle String
+  duration  Int
+  notes     String?
+  level     String?
+  color     String
+  teacherId String
+  genreId   String
+  genre     Genre              @relation(fields: [genreId], references: [id])
+  teacher   Teacher            @relation(fields: [teacherId], references: [id])
+  scheduled ScheduledRoutine[]
+  dancers   Dancer[]           @relation("DancerToRoutine")
+}
+
+model ScheduledRoutine {
+  id           String   @id @default(cuid())
+  date         DateTime
+  startMinutes Int
+  duration     Int
+  routineId    String
+  roomId       String
+  room         Room     @relation(fields: [roomId], references: [id])
+  routine      Routine  @relation(fields: [routineId], references: [id])
+
+  @@index([date, roomId, startMinutes])
+}

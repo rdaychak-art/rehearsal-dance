@@ -1,0 +1,480 @@
+'use client';
+
+import React, { useState } from 'react';
+import { Room } from '../../types/room';
+import { ScheduledRoutine } from '../../types/schedule';
+import { Routine } from '../../types/routine';
+import { TimeSlot } from './TimeSlot';
+import { ScheduledBlock } from './ScheduledBlock';
+import { formatTime, getShortDayName } from '../../utils/timeUtils';
+import { findConflicts } from '../../utils/conflictUtils';
+import { ChevronLeft, ChevronRight, Calendar, Save, AlertCircle } from 'lucide-react';
+
+interface CalendarGridProps {
+  rooms: Room[];
+  scheduledRoutines: ScheduledRoutine[];
+  onDrop: (routine: Routine, timeSlot: { hour: number; minute: number; day: number; roomId: string; date: string }) => void;
+  onRoutineClick: (routine: ScheduledRoutine) => void;
+  onMoveRoutine: (routine: ScheduledRoutine, newTimeSlot: { hour: number; minute: number; day: number; roomId: string; date: string }) => void;
+  onDeleteRoutine: (routine: ScheduledRoutine) => void;
+  visibleRooms: number;
+  hasUnsavedChanges?: boolean;
+  onSaveChanges?: () => void;
+}
+
+type ViewMode = 'day' | '4days' | 'week' | 'month';
+
+export const CalendarGrid: React.FC<CalendarGridProps> = ({
+  rooms,
+  scheduledRoutines,
+  onDrop,
+  onRoutineClick,
+  onMoveRoutine,
+  onDeleteRoutine,
+  visibleRooms,
+  hasUnsavedChanges = false,
+  onSaveChanges
+}) => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<ViewMode>('week');
+  const [startHour, setStartHour] = useState(9);
+  const [endHour, setEndHour] = useState(21);
+  const [timeInterval, setTimeInterval] = useState(60);
+
+  const getDatesForView = (date: Date, view: ViewMode): Date[] => {
+    const dates: Date[] = [];
+    
+    switch (view) {
+      case 'day': {
+        // Single day
+        dates.push(new Date(date));
+        break;
+      }
+      case '4days': {
+        // 4 consecutive days starting from the current date
+        for (let i = 0; i < 4; i++) {
+          const day = new Date(date);
+          day.setDate(date.getDate() + i);
+          dates.push(day);
+        }
+        break;
+      }
+      case 'week': {
+        // Week starting from Sunday
+        const start = new Date(date);
+        const day = start.getDay();
+        const diff = start.getDate() - day;
+        start.setDate(diff);
+        
+        for (let i = 0; i < 7; i++) {
+          const day = new Date(start);
+          day.setDate(start.getDate() + i);
+          dates.push(day);
+        }
+        break;
+      }
+      case 'month': {
+        // Full month calendar grid
+        const start = new Date(date.getFullYear(), date.getMonth(), 1);
+        const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        
+        // Start from the Sunday of the week containing the first day of the month
+        const firstDay = start.getDay();
+        start.setDate(start.getDate() - firstDay);
+        
+        // End on the Saturday of the week containing the last day of the month
+        const lastDay = end.getDay();
+        const daysToAdd = 6 - lastDay;
+        end.setDate(end.getDate() + daysToAdd);
+        
+        const current = new Date(start);
+        while (current <= end) {
+          dates.push(new Date(current));
+          current.setDate(current.getDate() + 1);
+        }
+        break;
+      }
+    }
+    
+    return dates;
+  };
+
+  const viewDates = getDatesForView(currentDate, viewMode);
+  const activeRooms = rooms.filter(room => room.isActive).slice(0, visibleRooms);
+
+  const navigateDate = (direction: 'prev' | 'next') => {
+    const newDate = new Date(currentDate);
+    
+    switch (viewMode) {
+      case 'day':
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
+        break;
+      case '4days':
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 4 : -4));
+        break;
+      case 'week':
+        newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
+        break;
+      case 'month':
+        newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
+        break;
+    }
+    
+    setCurrentDate(newDate);
+  };
+
+  const goToToday = () => {
+    setCurrentDate(new Date());
+  };
+
+  const formatDateRange = () => {
+    if (viewDates.length === 0) return '';
+    
+    switch (viewMode) {
+      case 'day': {
+        const date = viewDates[0];
+        return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      }
+      case '4days': {
+        const start = viewDates[0];
+        const end = viewDates[viewDates.length - 1];
+        return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+      }
+      case 'week': {
+        const start = viewDates[0];
+        const end = viewDates[6];
+        return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      }
+      case 'month': {
+        const date = viewDates[0];
+        return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      }
+      default:
+        return '';
+    }
+  };
+
+
+  // Get routine for specific time slot and room
+  const getRoutineForSlot = (hour: number, minute: number, date: Date, roomId: string): ScheduledRoutine | null => {
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+    return scheduledRoutines.find(routine => 
+      routine.roomId === roomId &&
+      routine.date === dateStr &&
+      routine.startTime.hour === hour &&
+      routine.startTime.minute === minute
+    ) || null;
+  };
+
+  // Check if time slot has conflicts
+  const hasConflicts = (hour: number, minute: number, date: Date, roomId: string): boolean => {
+    const routine = getRoutineForSlot(hour, minute, date, roomId);
+    if (!routine) return false;
+    
+    const routineConflicts = findConflicts(scheduledRoutines, routine, rooms);
+    return routineConflicts.length > 0;
+  };
+
+  // Generate time slots
+  const timeSlots: Array<{ hour: number; minute: number }> = [];
+  for (let hour = startHour; hour < endHour; hour++) {
+    for (let minute = 0; minute < 60; minute += timeInterval) {
+      timeSlots.push({ hour, minute });
+    }
+  }
+  
+  // Add some extra content to ensure scrolling
+  const totalTimeSlots = timeSlots.length;
+  console.log(`Generated ${totalTimeSlots} time slots from ${startHour}:00 to ${endHour}:00`);
+  console.log(`Calendar dimensions: ${activeRooms.length} rooms × 7 days = ${activeRooms.length * 7} columns`);
+
+  return (
+    <div className="flex-1 bg-white flex flex-col" style={{ height: '100%' }}>
+      {/* Header */}
+      <div className="border-b border-gray-200 p-4 flex-shrink-0">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-gray-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Schedule</h2>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigateDate('prev')}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              
+              <button
+                onClick={goToToday}
+                className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Today
+              </button>
+              
+              <button
+                onClick={() => navigateDate('next')}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {/* Save Changes Button */}
+            {hasUnsavedChanges && onSaveChanges && (
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-orange-500" />
+                <button
+                  onClick={onSaveChanges}
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  <Save className="w-4 h-4" />
+                  Save Changes
+                </button>
+              </div>
+            )}
+            
+            <div className="text-sm text-gray-600">
+              {formatDateRange()}
+            </div>
+            
+            {/* View Toggle Buttons */}
+            <div className="flex items-center gap-1 border border-gray-300 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('day')}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  viewMode === 'day' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Day
+              </button>
+              <button
+                onClick={() => setViewMode('4days')}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  viewMode === '4days' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                4 Days
+              </button>
+              <button
+                onClick={() => setViewMode('week')}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  viewMode === 'week' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Week
+              </button>
+              <button
+                onClick={() => setViewMode('month')}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  viewMode === 'month' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Month
+              </button>
+            </div>
+            
+            {viewMode !== 'month' && (
+            <div className="flex items-center gap-2">
+              <select
+                value={`${startHour}-${endHour}`}
+                onChange={(e) => {
+                  const [start, end] = e.target.value.split('-').map(Number);
+                  setStartHour(start);
+                  setEndHour(end);
+                }}
+                className="px-2 py-1 border border-gray-300 rounded text-xs"
+              >
+                <option value="6-24">6 AM - 12 AM</option>
+                <option value="8-22">8 AM - 10 PM</option>
+                <option value="9-21">9 AM - 9 PM</option>
+                <option value="10-20">10 AM - 8 PM</option>
+              </select>
+              
+              <select
+                value={timeInterval}
+                onChange={(e) => setTimeInterval(Number(e.target.value))}
+                className="px-2 py-1 border border-gray-300 rounded text-xs"
+              >
+                <option value={15}>15 min</option>
+                <option value={30}>30 min</option>
+                <option value={60}>1 hour</option>
+              </select>
+            </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+
+      {/* Calendar Grid */}
+      <div className="flex-1 overflow-auto bg-white border-2 border-blue-200" style={{ 
+        overflow: 'auto', 
+        minHeight: '400px',
+        height: 'calc(100vh - 300px)',
+        overflowX: 'auto',
+        overflowY: 'scroll'
+      }}>
+        <div className="min-w-max bg-gray-50" style={{ minWidth: 'max-content' }}>
+          {/* Days Header */}
+          <div className="flex border-b border-gray-200 sticky top-0 bg-white z-20" style={{ minWidth: 'max-content', position: 'sticky', top: 0 }}>
+            {/* Time column header */}
+            <div className={`${viewMode === 'month' ? 'w-24' : 'w-24'} bg-gray-50 border-r border-gray-200 flex items-center justify-center sticky left-0 z-30`} style={{ position: 'sticky', left: 0 }}>
+              {viewMode === 'month' ? (
+                <span className="text-xs font-medium text-gray-600"></span>
+              ) : (
+                <span className="text-xs font-medium text-gray-600">TIME</span>
+              )}
+            </div>
+            
+            {/* Days */}
+            {viewMode === 'month' ? (
+              // Month view: Week day headers
+              <>
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                  <div key={idx} className="flex-1 border-r border-gray-200 last:border-r-0 p-2 text-center bg-gray-50">
+                    <span className="text-xs font-medium text-gray-600">{day}</span>
+                  </div>
+                ))}
+              </>
+            ) : (
+              // Day, 4 Days, Week views: Time-based grid headers
+              <>
+                {viewDates.map((date, dayIndex) => (
+                  <div key={dayIndex} className="border-r border-gray-200 last:border-r-0" style={{ minWidth: `${activeRooms.length * 120}px` }}>
+                    <div className="bg-gray-50 border-b border-gray-200 p-4 text-center">
+                      <div className="font-semibold text-gray-900 text-base">
+                        {getShortDayName(date.getDay())}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {date.getDate()}
+                      </div>
+                    </div>
+                    
+                    {/* Room headers for this day */}
+                    <div className="flex">
+                      {activeRooms.map(room => (
+                        <div key={room.id} className="border-r border-gray-200 last:border-r-0 p-3 text-center" style={{ width: '120px' }}>
+                          <div className="text-sm font-medium text-gray-700">{room.name}</div>
+                          {room.capacity && (
+                            <div className="text-xs text-gray-500">({room.capacity})</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          {/* Month view calendar grid */}
+          {viewMode === 'month' && (
+            <>
+              {Array.from({ length: Math.ceil(viewDates.length / 7) }, (_, weekIdx) => (
+                <div key={weekIdx} className="flex border-b border-gray-200">
+                  <div className="w-24 bg-gray-50 border-r border-gray-200 sticky left-0 z-30" style={{ position: 'sticky', left: 0 }}></div>
+                  {viewDates.slice(weekIdx * 7, (weekIdx + 1) * 7).map((date, dayIdx) => {
+                    const isCurrentMonth = date.getMonth() === currentDate.getMonth();
+                    const isToday = date.toDateString() === new Date().toDateString();
+                    
+                    // Get routines for this day (match by actual date)
+                    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+                    const dayRoutines = scheduledRoutines.filter(r => r.date === dateStr);
+                    
+                    return (
+                      <div
+                        key={dayIdx}
+                        className="flex-1 border-r border-gray-200 last:border-r-0 p-2 min-h-[100px] bg-white"
+                      >
+                        <div className={`text-sm font-medium mb-1 ${isCurrentMonth ? 'text-gray-900' : 'text-gray-400'} ${isToday ? 'text-blue-600 font-bold' : ''}`}>
+                          {date.getDate()}
+                        </div>
+                        <div className="space-y-1">
+                          {dayRoutines.slice(0, 3).map(routine => (
+                            <div
+                              key={routine.id}
+                              className="text-xs p-1 rounded truncate cursor-pointer hover:opacity-80"
+                              style={{ backgroundColor: routine.routine.color || '#3b82f6', color: '#fff' }}
+                              onClick={() => onRoutineClick(routine)}
+                            >
+                              {routine.routine.songTitle}
+                            </div>
+                          ))}
+                          {dayRoutines.length > 3 && (
+                            <div className="text-xs text-gray-500">+{dayRoutines.length - 3} more</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Time slots and grid - only for non-month views */}
+          {viewMode !== 'month' && (
+          <div className="flex" style={{ minWidth: 'max-content' }}>
+            {/* Time column */}
+            <div className="w-24 bg-gray-50 border-r border-gray-200 sticky left-0 z-30 flex-shrink-0" style={{ position: 'sticky', left: 0 }}>
+              {timeSlots.map(({ hour, minute }, index) => (
+                <div key={index} className="h-16 border-b border-gray-200 flex items-center justify-center bg-white">
+                  <span className="text-sm text-gray-600 font-medium">
+                    {formatTime(hour, minute)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Calendar grid */}
+            {viewDates.map((date, dayIndex) => (
+              <div key={dayIndex} className="border-r border-gray-200 last:border-r-0 flex-shrink-0" style={{ minWidth: `${activeRooms.length * 120}px` }}>
+                <div className="flex">
+                  {activeRooms.map(room => (
+                    <div key={room.id} className="border-r border-gray-200 last:border-r-0 flex-shrink-0 bg-white" style={{ width: '120px' }}>
+                      {timeSlots.map(({ hour, minute }, timeIndex) => {
+                        const routine = getRoutineForSlot(hour, minute, date, room.id);
+                        const hasConflict = hasConflicts(hour, minute, date, room.id);
+                        const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+                        
+                        return (
+                          <TimeSlot
+                            key={timeIndex}
+                            hour={hour}
+                            minute={minute}
+                            day={date.getDay()}
+                            roomId={room.id}
+                            onDrop={(routine, timeSlot) => onDrop(routine, { ...timeSlot, date: dateStr })}
+                            onMoveRoutine={(routine, timeSlot) => onMoveRoutine(routine, { ...timeSlot, date: dateStr })}
+                            hasConflict={hasConflict}
+                          >
+                                {routine && (
+                                  <ScheduledBlock
+                                    routine={routine}
+                                    onClick={() => onRoutineClick(routine)}
+                                    onDelete={onDeleteRoutine}
+                                    timeInterval={timeInterval}
+                                  />
+                                )}
+                          </TimeSlot>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+

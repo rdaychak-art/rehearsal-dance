@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { ScheduledRoutine } from '../../types/schedule';
-import { Dancer } from '../../types/dancer';
 import { X, Users, Calendar, Clock, Music } from 'lucide-react';
 import { formatTime } from '../../utils/timeUtils';
 
@@ -123,6 +122,7 @@ export const ScheduledDancersModal: React.FC<ScheduledDancersModalProps> = ({
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
                         {dancer.avatar ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={dancer.avatar}
                             alt={dancer.name}

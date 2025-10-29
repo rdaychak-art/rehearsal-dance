@@ -74,7 +74,15 @@ export default function Home() {
         setDancers(dancersJson);
         setRoutines(routinesJson);
         // Map scheduled API to front-end ScheduledRoutine shape if needed
-        const mapped: ScheduledRoutine[] = scheduledJson.map((it: any) => {
+        const mapped: ScheduledRoutine[] = scheduledJson.map((it: {
+          id: string;
+          routineId: string;
+          routine: Routine;
+          roomId: string;
+          startMinutes: number;
+          duration: number;
+          date: string;
+        }) => {
           const startHour = Math.floor(it.startMinutes / 60);
           const startMinute = it.startMinutes % 60;
           const endMinutes = it.startMinutes + it.duration;
@@ -258,9 +266,10 @@ export default function Home() {
       toast.success('Routine saved successfully');
       setShowRoutineModal(false);
       setSelectedRoutine(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Failed to save routine:', e);
-      toast.error(e?.message || 'Failed to save routine');
+      const errorMessage = e instanceof Error ? e.message : 'Failed to save routine';
+      toast.error(errorMessage);
     }
   }, [routines]);
 
@@ -287,7 +296,24 @@ export default function Home() {
 
     console.log('New scheduled routine created:', newScheduledRoutine);
 
-    // First check if the room/studio already has a routine at this time
+    // First check if the same routine is already scheduled at this exact time slot
+    const sameRoutineAtSlot = scheduledRoutines.find(sr => {
+      return sr.routineId === routine.id &&
+             sr.roomId === timeSlot.roomId &&
+             sr.date === timeSlot.date &&
+             sr.startTime.hour === timeSlot.hour &&
+             sr.startTime.minute === timeSlot.minute;
+    });
+    
+    if (sameRoutineAtSlot) {
+      const roomName = rooms.find(r => r.id === timeSlot.roomId)?.name || 'Studio';
+      const conflictTime = formatTime(timeSlot.hour, timeSlot.minute);
+      toast.error(`"${routine.songTitle}" is already scheduled at ${roomName} on ${conflictTime}. Cannot schedule the same routine twice at the same time slot.`);
+      console.log('Same routine already scheduled at this time slot - cannot schedule routine');
+      return;
+    }
+
+    // Check if the room/studio already has a routine at this time
     const roomConflict = checkRoomConflict(scheduledRoutines, newScheduledRoutine);
     if (roomConflict) {
       const roomName = rooms.find(r => r.id === timeSlot.roomId)?.name || 'Studio';
@@ -352,8 +378,25 @@ export default function Home() {
       date: newTimeSlot.date // Update the actual date
     };
 
-    // First check if the room/studio already has a routine at this time (excluding the routine being moved)
+    // First check if the same routine is already scheduled at this exact time slot (excluding the routine being moved)
     const otherRoutines = scheduledRoutines.filter(sr => sr.id !== routine.id);
+    const sameRoutineAtSlot = otherRoutines.find(sr => {
+      return sr.routineId === routine.routineId &&
+             sr.roomId === newTimeSlot.roomId &&
+             sr.date === newTimeSlot.date &&
+             sr.startTime.hour === newTimeSlot.hour &&
+             sr.startTime.minute === newTimeSlot.minute;
+    });
+    
+    if (sameRoutineAtSlot) {
+      const roomName = rooms.find(r => r.id === newTimeSlot.roomId)?.name || 'Studio';
+      const conflictTime = formatTime(newTimeSlot.hour, newTimeSlot.minute);
+      toast.error(`"${routine.routine.songTitle}" is already scheduled at ${roomName} on ${conflictTime}. Cannot schedule the same routine twice at the same time slot.`);
+      console.log('Same routine already scheduled at this time slot - cannot move routine');
+      return;
+    }
+
+    // Check if the room/studio already has a routine at this time (excluding the routine being moved)
     const roomConflict = checkRoomConflict(otherRoutines, updatedRoutine);
     if (roomConflict) {
       const roomName = rooms.find(r => r.id === newTimeSlot.roomId)?.name || 'Studio';
@@ -428,8 +471,7 @@ export default function Home() {
       
       setPendingScheduledRoutine(null);
       setPendingRoutine(null);
-      setShowConflictModal(false);
-      resolveConflicts();
+      resolveConflicts(); // This already handles closing the modal
     }
   }, [scheduledRoutines, pendingScheduledRoutine, pendingRoutine, resolveConflicts]);
 
@@ -460,7 +502,7 @@ export default function Home() {
         .map(s => s.id);
 
       // Save all changes
-      const savePromises: Promise<any>[] = [];
+      const savePromises: Promise<ScheduledRoutine | Response>[] = [];
       const savedNewRoutines: ScheduledRoutine[] = [];
       const savedUpdatedRoutines: ScheduledRoutine[] = [];
 
@@ -581,9 +623,10 @@ export default function Home() {
       setHasUnsavedChanges(false);
 
       toast.success('Schedule changes saved successfully');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Failed to save schedule changes:', e);
-      toast.error(e?.message || 'Failed to save schedule changes');
+      const errorMessage = e instanceof Error ? e.message : 'Failed to save schedule changes';
+      toast.error(errorMessage);
     }
   }, [scheduledRoutines, savedScheduledRoutines]);
   
@@ -647,8 +690,9 @@ export default function Home() {
       const created = await res.json();
       setDancers(prev => [...prev, ...created]);
       toast.success(`Imported ${created.length} dancers`);
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to import dancers');
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : 'Failed to import dancers';
+      toast.error(errorMessage);
     }
   }, []);
 
@@ -666,7 +710,7 @@ export default function Home() {
         body: JSON.stringify(updatedDancer),
       });
       if (!res.ok) throw new Error('Failed to update dancer');
-      const saved = await res.json();
+      await res.json(); // Response confirmation
       
       setDancers(prev => prev.map(d => d.id === updatedDancer.id ? updatedDancer : d));
       
@@ -694,8 +738,9 @@ export default function Home() {
       toast.success('Dancer updated successfully');
       setShowDancerEditModal(false);
       setSelectedDancer(null);
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to update dancer');
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : 'Failed to update dancer';
+      toast.error(errorMessage);
     }
   }, []);
 
@@ -713,8 +758,9 @@ export default function Home() {
       setDancers(prev => [...prev, createdDancer]);
       toast.success('Dancer added successfully');
       setShowDancerAddModal(false);
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to add dancer');
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : 'Failed to add dancer';
+      toast.error(errorMessage);
     }
   }, []);
 
@@ -750,8 +796,9 @@ export default function Home() {
       }));
       
       toast.success(`Dancer ${deletedDancer?.name || 'deleted'} removed successfully`);
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to delete dancer');
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : 'Failed to delete dancer';
+      toast.error(errorMessage);
     }
   }, [dancers]);
 

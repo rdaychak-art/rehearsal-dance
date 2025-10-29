@@ -23,13 +23,24 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const [selectedTeacher, setSelectedTeacher] = useState<string>('all');
 
-  // Count how many times each routine is scheduled
+  // Count how many times each routine is scheduled and calculate total hours
   const routineScheduledCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     scheduledRoutines.forEach(scheduled => {
       counts[scheduled.routineId] = (counts[scheduled.routineId] || 0) + 1;
     });
     return counts;
+  }, [scheduledRoutines]);
+
+  // Calculate total scheduled hours for each routine
+  const routineScheduledHours = useMemo(() => {
+    const hours: Record<string, number> = {};
+    scheduledRoutines.forEach(scheduled => {
+      const routineId = scheduled.routineId;
+      const hoursInThisSlot = scheduled.duration / 60; // Convert minutes to hours
+      hours[routineId] = (hours[routineId] || 0) + hoursInThisSlot;
+    });
+    return hours;
   }, [scheduledRoutines]);
 
   const filteredAndSortedRoutines = useMemo(() => {
@@ -61,7 +72,7 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
     });
 
     return [...activeRoutines, ...maxedRoutines];
-  }, [routines, scheduledRoutines, searchTerm, selectedGenre, selectedTeacher, routineScheduledCounts]);
+  }, [routines, searchTerm, selectedGenre, selectedTeacher, routineScheduledCounts]);
 
   const uniqueGenres = Array.from(new Set(routines.map(r => r.genre.name)));
   const uniqueTeachers = Array.from(new Set(routines.map(r => r.teacher.name)));
@@ -151,6 +162,7 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
           ) : (
             filteredAndSortedRoutines.map(routine => {
               const scheduledCount = routineScheduledCounts[routine.id] || 0;
+              const scheduledHours = routineScheduledHours[routine.id] || 0;
               const isMaxed = scheduledCount >= 6;
               return (
                 <RoutineCard
@@ -159,6 +171,7 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
                   onClick={onRoutineClick}
                   isMaxed={isMaxed}
                   scheduledCount={scheduledCount}
+                  scheduledHours={scheduledHours}
                 />
               );
             })

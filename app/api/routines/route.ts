@@ -58,7 +58,16 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Routine ID is required' }, { status: 400 });
   }
 
-  const updateData: any = {
+  const updateData: {
+    songTitle?: string;
+    duration?: number;
+    notes?: string | null;
+    level?: string | null;
+    color?: string;
+    teacherId?: string;
+    genreId?: string;
+    dancers?: { set: { id: string }[] };
+  } = {
     ...(songTitle !== undefined && { songTitle }),
     ...(duration !== undefined && { duration }),
     ...(notes !== undefined && { notes }),

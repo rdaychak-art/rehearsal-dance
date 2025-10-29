@@ -172,7 +172,10 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const where: any = {
+      const where: {
+        routine: { dancers: { some: { id: string } } };
+        date?: { gte?: Date; lte?: Date };
+      } = {
         routine: {
           dancers: { some: { id } }
         }
@@ -204,14 +207,16 @@ export async function POST(req: NextRequest) {
       try {
         await sendWithSendGrid(email, dancer.name, subject, text);
         results.push({ id, status: 'sent' });
-      } catch (e: any) {
-        results.push({ id, status: 'skipped', reason: e?.message || 'send failed' });
+      } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : 'send failed';
+        results.push({ id, status: 'skipped', reason: errorMessage });
       }
     }
 
     return NextResponse.json({ success: true, results });
-  } catch (error: any) {
-    return NextResponse.json({ message: error?.message || 'Failed to send email' }, { status: 500 });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to send email';
+    return NextResponse.json({ message: errorMessage }, { status: 500 });
   }
 }
 

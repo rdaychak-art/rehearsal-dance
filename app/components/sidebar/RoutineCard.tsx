@@ -3,16 +3,17 @@
 import React, { useRef, useEffect } from 'react';
 import { Routine } from '../../types/routine';
 import { useRoutineDrag } from '../../hooks/useDragAndDrop';
-import { GripVertical, Clock, Users } from 'lucide-react';
+import { GripVertical } from 'lucide-react';
 
 interface RoutineCardProps {
   routine: Routine;
   onClick: (routine: Routine) => void;
   isMaxed?: boolean;
   scheduledCount?: number;
+  scheduledHours?: number;
 }
 
-export const RoutineCard: React.FC<RoutineCardProps> = ({ routine, onClick, isMaxed = false, scheduledCount = 0 }) => {
+export const RoutineCard: React.FC<RoutineCardProps> = ({ routine, onClick, isMaxed = false, scheduledCount = 0, scheduledHours = 0 }) => {
   const { drag, isDragging } = useRoutineDrag(routine, !isMaxed);
   const ref = useRef<HTMLDivElement>(null);
   
@@ -66,10 +67,10 @@ export const RoutineCard: React.FC<RoutineCardProps> = ({ routine, onClick, isMa
             </span>
           </div> */}
           
-          <div className="mt-2 flex items-center gap-2">
-            {routine.scheduledHours > 0 && (
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            {scheduledHours > 0 && (
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                {routine.scheduledHours}h scheduled
+                {scheduledHours.toFixed(1)}h scheduled
               </span>
             )}
             {scheduledCount > 0 && (

@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { Dancer } from '../../types/dancer';
 import { ScheduledRoutine, Room } from '../../types/schedule';
-import { getDancerSchedules, DancerScheduleItem } from '../../utils/dancerUtils';
+import { getDancerSchedules } from '../../utils/dancerUtils';
 import { Search, ChevronDown, ChevronRight, Calendar, X, Edit, Upload, Plus, Trash2 } from 'lucide-react';
 
 interface DancersListProps {
@@ -89,10 +89,13 @@ export const DancersList: React.FC<DancersListProps> = ({
   const filteredDancers = useMemo(() => {
     return dancers.filter(dancer => {
       // Search filter
+      const emailStr = dancer.email 
+        ? (Array.isArray(dancer.email) ? dancer.email.join('; ') : dancer.email)
+        : '';
       const matchesSearch = searchTerm === '' ||
         dancer.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         dancer.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        dancer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emailStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
         dancer.name.toLowerCase().includes(searchTerm.toLowerCase());
 
       // Level filter

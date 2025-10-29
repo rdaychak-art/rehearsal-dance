@@ -301,8 +301,8 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
             <h3 className="text-sm font-medium text-gray-700 mb-2">CSV Format Requirements:</h3>
             <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
-              <li>First column should be "First Name"</li>
-              <li>Second column should be "Last Name"</li>
+              <li>First column should be &quot;First Name&quot;</li>
+              <li>Second column should be &quot;Last Name&quot;</li>
               <li>Include columns: Age, Birth Date, Gender, Classes, Email, Primary Phone</li>
               <li>Classes should be comma-separated</li>
               <li>Multiple emails should be semicolon-separated (;)</li>

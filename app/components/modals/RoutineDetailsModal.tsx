@@ -228,7 +228,7 @@ export const RoutineDetailsModal: React.FC<RoutineDetailsModalProps> = ({
               
               {editedRoutine.dancers.length === 0 ? (
                 <div className="border border-gray-200 rounded-lg p-8 text-center text-gray-500">
-                  No dancers selected. Click "Select" to add dancers to this routine.
+                  No dancers selected. Click &quot;Select&quot; to add dancers to this routine.
                 </div>
               ) : (
                 <div className="border border-gray-200 rounded-lg overflow-hidden">

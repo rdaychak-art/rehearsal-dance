@@ -80,10 +80,11 @@ export async function DELETE(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error deleting dancer:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete dancer';
     return NextResponse.json(
-      { error: error.message || 'Failed to delete dancer' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

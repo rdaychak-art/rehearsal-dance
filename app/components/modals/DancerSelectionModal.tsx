@@ -61,7 +61,7 @@ export const DancerSelectionModal: React.FC<DancerSelectionModalProps> = ({
   };
 
   const filteredAndSortedDancers = useMemo(() => {
-    let filtered = dancers.filter(dancer => {
+    const filtered = dancers.filter(dancer => {
       const matchesSearch = searchTerm === '' || 
         dancer.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         dancer.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -79,8 +79,8 @@ export const DancerSelectionModal: React.FC<DancerSelectionModalProps> = ({
 
     if (sortField) {
       filtered.sort((a, b) => {
-        let aVal: any = '';
-        let bVal: any = '';
+        let aVal: string | number = '';
+        let bVal: string | number = '';
 
         switch (sortField) {
           case 'firstName':
@@ -104,8 +104,12 @@ export const DancerSelectionModal: React.FC<DancerSelectionModalProps> = ({
             bVal = b.gender || '';
             break;
           case 'email':
-            aVal = a.email || '';
-            bVal = b.email || '';
+            aVal = a.email 
+              ? (Array.isArray(a.email) ? a.email.join('; ') : a.email)
+              : '';
+            bVal = b.email 
+              ? (Array.isArray(b.email) ? b.email.join('; ') : b.email)
+              : '';
             break;
           case 'phone':
             aVal = a.phone || '';
@@ -113,11 +117,13 @@ export const DancerSelectionModal: React.FC<DancerSelectionModalProps> = ({
             break;
         }
 
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-          const comparison = aVal.localeCompare(bVal);
+        if (sortField === 'age') {
+          // Numeric comparison for age
+          const comparison = (aVal as number) - (bVal as number);
           return sortDirection === 'asc' ? comparison : -comparison;
         } else {
-          const comparison = aVal - bVal;
+          // String comparison for all other fields
+          const comparison = String(aVal).localeCompare(String(bVal));
           return sortDirection === 'asc' ? comparison : -comparison;
         }
       });

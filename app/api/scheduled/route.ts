@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from');
   const to = searchParams.get('to');
 
-  const where: any = {};
+  const where: { date?: { gte?: Date; lte?: Date } } = {};
   if (from || to) {
     where.date = {};
     if (from) where.date.gte = new Date(from);

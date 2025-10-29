@@ -1,4 +1,4 @@
-import { PrismaClient } from '../app/generated/prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { mockRoutines, mockTeachers, mockGenres } from '../app/data/mockRoutines';
 import { mockDancers } from '../app/data/mockDancers';
 import { mockRooms, mockScheduledRoutines } from '../app/data/mockSchedules';

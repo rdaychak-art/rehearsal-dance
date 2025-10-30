@@ -6,7 +6,7 @@ import { ScheduledRoutine } from '../../types/schedule';
 import { Routine } from '../../types/routine';
 import { TimeSlot } from './TimeSlot';
 import { ScheduledBlock } from './ScheduledBlock';
-import { formatTime, getShortDayName } from '../../utils/timeUtils';
+import { formatTime, getShortDayName, addMinutesToTime } from '../../utils/timeUtils';
 import { findConflicts } from '../../utils/conflictUtils';
 import { ChevronLeft, ChevronRight, Calendar, Save, AlertCircle } from 'lucide-react';
 
@@ -196,14 +196,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     ) || null;
   };
 
-  // Check if time slot has conflicts
-  const hasConflicts = (hour: number, minute: number, date: Date, roomId: string): boolean => {
-    const routine = getRoutineForSlot(hour, minute, date, roomId);
-    if (!routine) return false;
-    
-    const routineConflicts = findConflicts(scheduledRoutines, routine, rooms);
-    return routineConflicts.length > 0;
-  };
+  // hasConflicts helper removed (unused)
 
   // Generate time slots
   const timeSlots: Array<{ hour: number; minute: number }> = [];
@@ -471,7 +464,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                           const subMinutes = [0, 15, 30, 45];
                           // Find any routine starting within this hour block
                           let foundRoutine: ScheduledRoutine | null = null;
-                          let foundOffsetMin = 0;
                           let foundIndex = 0;
                           for (const m of subMinutes) {
                             const mm = minute + m;
@@ -480,7 +472,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                             const r = getRoutineForSlot(hh, mmAdj, date, room.id);
                             if (r) {
                               foundRoutine = r;
-                              foundOffsetMin = m;
                               foundIndex = subMinutes.indexOf(m);
                               break;
                             }
@@ -492,7 +483,19 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                 const hh = hour + Math.floor(mm / 60);
                                 const mmAdj = mm % 60;
                                 const hasConflict = slotHasDancerConflict(hh, mmAdj, date, room.id);
-                                const hasConflictBlock = findConflicts(scheduledRoutines, { ...foundRoutine, startTime: { hour: hh, minute: mmAdj, day: date.getDay() } } as any, rooms).length > 0;
+                                const hypothetical = foundRoutine
+                                  ? {
+                                      ...foundRoutine,
+                                      startTime: { hour: hh, minute: mmAdj, day: date.getDay() },
+                                      endTime: addMinutesToTime(
+                                        { hour: hh, minute: mmAdj, day: date.getDay() },
+                                        foundRoutine.duration
+                                      ),
+                                    }
+                                  : null;
+                                const hasConflictBlock = hypothetical
+                                  ? findConflicts(scheduledRoutines, hypothetical, rooms).length > 0
+                                  : false;
                                 return (
                                   <TimeSlot
                                     key={`${timeIndex}-${idx}`}
@@ -525,7 +528,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                         if (timeInterval === 30) {
                           const subMinutes = [0, 15];
                           let foundRoutine: ScheduledRoutine | null = null;
-                          let foundOffsetMin = 0;
                           let foundIndex = 0;
                           for (const m of subMinutes) {
                             const mm = minute + m;
@@ -534,7 +536,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                             const r = getRoutineForSlot(hh, mmAdj, date, room.id);
                             if (r) {
                               foundRoutine = r;
-                              foundOffsetMin = m;
                               foundIndex = subMinutes.indexOf(m);
                               break;
                             }
@@ -546,7 +547,19 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                 const hh = hour + Math.floor(mm / 60);
                                 const mmAdj = mm % 60;
                                 const hasConflict = slotHasDancerConflict(hh, mmAdj, date, room.id);
-                                const hasConflictBlock = findConflicts(scheduledRoutines, { ...foundRoutine, startTime: { hour: hh, minute: mmAdj, day: date.getDay() } } as any, rooms).length > 0;
+                                const hypothetical = foundRoutine
+                                  ? {
+                                      ...foundRoutine,
+                                      startTime: { hour: hh, minute: mmAdj, day: date.getDay() },
+                                      endTime: addMinutesToTime(
+                                        { hour: hh, minute: mmAdj, day: date.getDay() },
+                                        foundRoutine.duration
+                                      ),
+                                    }
+                                  : null;
+                                const hasConflictBlock = hypothetical
+                                  ? findConflicts(scheduledRoutines, hypothetical, rooms).length > 0
+                                  : false;
                                 return (
                                   <TimeSlot
                                     key={`${timeIndex}-${idx}`}

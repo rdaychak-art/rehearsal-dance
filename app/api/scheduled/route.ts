@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -37,8 +38,8 @@ export async function POST(req: NextRequest) {
       include: { routine: { include: { teacher: true, genre: true, dancers: true } }, room: true },
     });
     return NextResponse.json(created, { status: 201 });
-  } catch (e: any) {
-    if (e?.code === 'P2002') {
+  } catch (e: unknown) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
       return NextResponse.json({ error: 'Time slot already occupied for this room and date.' }, { status: 409 });
     }
     return NextResponse.json({ error: 'Failed to create scheduled routine' }, { status: 500 });

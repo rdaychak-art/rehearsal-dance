@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { ScheduledRoutine } from '../../types/schedule';
 import { X, Users, Calendar, Clock, Music } from 'lucide-react';
 import { formatTime } from '../../utils/timeUtils';
@@ -18,17 +18,16 @@ export const ScheduledDancersModal: React.FC<ScheduledDancersModalProps> = ({
   onClose,
   onUpdateDuration,
 }) => {
+  // Hooks must be declared unconditionally
+  const [localDuration, setLocalDuration] = useState<number>(scheduledRoutine?.duration ?? 0);
+  React.useEffect(() => {
+    if (scheduledRoutine) setLocalDuration(scheduledRoutine.duration);
+  }, [scheduledRoutine]);
+
   if (!isOpen || !scheduledRoutine) return null;
 
   const routine = scheduledRoutine.routine;
   const dancers = routine.dancers;
-
-  // Local editable duration state (prefilled from scheduled routine duration)
-  const [localDuration, setLocalDuration] = useState<number>(scheduledRoutine.duration);
-  // Keep localDuration in sync if a different routine is opened
-  React.useEffect(() => {
-    if (scheduledRoutine) setLocalDuration(scheduledRoutine.duration);
-  }, [scheduledRoutine]);
 
   const formatBirthday = (birthday?: string) => {
     if (!birthday) return '-';

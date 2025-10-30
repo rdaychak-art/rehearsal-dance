@@ -54,7 +54,6 @@ export const ScheduledBlock: React.FC<ScheduledBlockProps> = ({ routine, onClick
   const startYRef = useRef(0);
   const startDurationRef = useRef(duration);
   const containerTopRef = useRef<number | null>(null);
-  const blockRef = useRef<HTMLDivElement>(null);
   const didResizeRef = useRef(false);
   const suppressClickRef = useRef(false);
   
@@ -62,7 +61,7 @@ export const ScheduledBlock: React.FC<ScheduledBlockProps> = ({ routine, onClick
     if (dragHandleRef.current) {
       drag(dragHandleRef.current);
     }
-  }, [drag, dragHandleRef.current]);
+  }, [drag]);
 
   useEffect(() => {
     // reset preview if routine changes

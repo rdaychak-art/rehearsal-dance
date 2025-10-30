@@ -9,11 +9,10 @@ interface RoutineCardProps {
   routine: Routine;
   onClick: (routine: Routine) => void;
   isMaxed?: boolean;
-  scheduledCount?: number;
   scheduledHours?: number;
 }
 
-export const RoutineCard: React.FC<RoutineCardProps> = ({ routine, onClick, isMaxed = false, scheduledCount = 0, scheduledHours = 0 }) => {
+export const RoutineCard: React.FC<RoutineCardProps> = ({ routine, onClick, isMaxed = false, scheduledHours = 0 }) => {
   const { drag, isDragging } = useRoutineDrag(routine, !isMaxed);
   const ref = useRef<HTMLDivElement>(null);
   

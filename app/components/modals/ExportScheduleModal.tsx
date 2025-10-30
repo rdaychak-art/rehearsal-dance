@@ -22,7 +22,7 @@ export const ExportScheduleModal: React.FC<ExportScheduleModalProps> = ({ isOpen
   React.useEffect(() => {
     // Ensure from is not after to
     if (fromDate > toDate) setToDate(fromDate);
-  }, [fromDate]);
+  }, [fromDate, toDate]);
 
   if (!isOpen) return null;
 

@@ -157,7 +157,10 @@ export async function POST(req: NextRequest) {
     }
 
     const dancers = await prisma.dancer.findMany({ where: { id: { in: targetIds } } });
-    const dancerById = new Map(dancers.map(d => [d.id, d]));
+    type DancerType = { id: string; name: string; email: string | null };
+    const dancerById = new Map<string, DancerType>(
+      dancers.map((d: DancerType) => [d.id, d])
+    );
     const results: { id: string; status: 'sent' | 'skipped'; reason?: string }[] = [];
 
     for (const id of targetIds) {
@@ -166,7 +169,7 @@ export async function POST(req: NextRequest) {
         results.push({ id, status: 'skipped', reason: 'not found' });
         continue;
       }
-      const email = Array.isArray(dancer.email) ? dancer.email[0] : dancer.email;
+      const email = dancer.email;
       if (!email) {
         results.push({ id, status: 'skipped', reason: 'no email' });
         continue;
@@ -192,7 +195,13 @@ export async function POST(req: NextRequest) {
         orderBy: [{ date: 'asc' }, { startMinutes: 'asc' }]
       });
 
-      const simplified = items.map(it => ({
+      const simplified = items.map((it: {
+        date: Date;
+        startMinutes: number;
+        duration: number;
+        routine: { songTitle: string; teacher: { name: string } };
+        room: { name: string };
+      }) => ({
         date: new Date(it.date),
         startMinutes: it.startMinutes,
         duration: it.duration,

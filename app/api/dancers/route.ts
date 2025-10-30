@@ -7,7 +7,7 @@ export async function GET() {
   });
   
   // Convert semicolon-separated email strings back to arrays for frontend compatibility
-  const transformedDancers = dancers.map(dancer => ({
+  const transformedDancers = dancers.map((dancer: { email: string | null }) => ({
     ...dancer,
     email: dancer.email && dancer.email.includes(';') 
       ? dancer.email.split(';').map(e => e.trim()).filter(e => e.length > 0)

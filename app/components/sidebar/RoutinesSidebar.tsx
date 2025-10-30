@@ -210,7 +210,6 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
                   routine={routine}
                   onClick={onRoutineClick}
                   isMaxed={isMaxed}
-                  scheduledCount={scheduledCount}
                   scheduledHours={scheduledHours}
                 />
               );

@@ -134,11 +134,15 @@ export const getRoomOverlaps = (
   candidate: ScheduledRoutine
 ): ScheduledRoutine[] => {
   const overlaps: ScheduledRoutine[] = [];
+  const candStart = candidate.startTime.hour * 60 + candidate.startTime.minute;
+  const candEnd = candStart + candidate.duration;
   for (const existing of scheduledRoutines) {
     if (existing.id === candidate.id) continue;
     if (existing.roomId !== candidate.roomId) continue;
     if (existing.date !== candidate.date) continue;
-    if (isTimeSlotOverlapping(candidate.startTime, candidate.endTime, existing.startTime, existing.endTime)) {
+    const exStart = existing.startTime.hour * 60 + existing.startTime.minute;
+    const exEnd = exStart + existing.duration;
+    if (candStart < exEnd && exStart < candEnd) {
       overlaps.push(existing);
     }
   }

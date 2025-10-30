@@ -34,7 +34,7 @@ export const ToolsSidebar: React.FC<ToolsSidebarProps> = ({
   );
 
   return (
-    <div className="w-64 bg-gray-50 border-l border-gray-200 flex flex-col h-screen">
+    <div className="w-64 bg-gray-50 border-l border-gray-200 flex flex-col h-screen overflow-y-auto">
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center gap-2 mb-4">
@@ -79,7 +79,7 @@ export const ToolsSidebar: React.FC<ToolsSidebarProps> = ({
             />
           </div>
           
-          <div className="max-h-64 overflow-y-auto space-y-1">
+          <div className="max-h-36 overflow-y-auto space-y-1">
             {filteredDancers.length > 0 ? (
               filteredDancers.map(dancer => (
                 <div
@@ -185,7 +185,7 @@ export const ToolsSidebar: React.FC<ToolsSidebarProps> = ({
             <span className="text-sm font-medium text-red-800">⚠️ Conflicts</span>
           </div>
           
-          <div className="space-y-2 max-h-40 overflow-y-auto">
+          <div className="space-y-2 max-h-64 overflow-y-auto">
             {conflicts.map((conflict, index) => (
               <div key={index} className="bg-red-50 border border-red-200 rounded-lg p-3">
                 <div className="text-xs font-bold text-red-900 mb-1">

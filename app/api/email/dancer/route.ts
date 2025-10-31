@@ -67,7 +67,7 @@ function dayNameFromDate(date: Date): string {
 
 function buildEmailText(dancerName: string, items: Array<{ date: Date; startMinutes: number; duration: number; songTitle: string; roomName: string; teacherName: string }>, rangeLabel: string): string {
   if (items.length === 0) {
-    return `Hi ${dancerName},\n\nHere's your rehearsal schedule for ${rangeLabel}:\n\nNo rehearsals scheduled in this period.\n\nBest regards,\nDance Studio Team`;
+    return `Hi ${dancerName},\n\nHere's your rehearsal schedule for ${rangeLabel}:\n\nNo rehearsals scheduled in this period.\n\nSincerely, Performing Dance Arts.`;
   }
 
   const lines = items.map((it) => {
@@ -78,7 +78,7 @@ function buildEmailText(dancerName: string, items: Array<{ date: Date; startMinu
     return `${dayName} ${it.date.toISOString().slice(0, 10)} - ${formatTime(start.hour, start.minute)} to ${formatTime(end.hour, end.minute)}\n  Routine: ${it.songTitle}\n  Room: ${it.roomName}\n  Teacher: ${it.teacherName}`;
   }).join('\n\n');
 
-  return `Hi ${dancerName},\n\nHere's your rehearsal schedule for ${rangeLabel}:\n\n${lines}\n\nPlease arrive 10 minutes early for warm-up.\n\nBest regards,\nDance Studio Team`;
+  return `Hi ${dancerName},\n\nHere's your rehearsal schedule for ${rangeLabel}:\n\n${lines}\n\nPlease arrive 10 minutes early for warm-up.\n\nSincerely, Performing Dance Arts.`;
 }
 
 async function sendWithSendGrid(toEmail: string, toName: string, subject: string, text: string) {

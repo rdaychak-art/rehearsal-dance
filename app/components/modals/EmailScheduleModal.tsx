@@ -58,8 +58,7 @@ ${routines.length === 0 ? 'No rehearsals scheduled this week.' : routines.map(ro
 
 Please arrive 10 minutes early for warm-up.
 
-Best regards,
-Dance Studio Team
+Sincerely, Performing Dance Arts.
     `.trim();
 
     return scheduleText;

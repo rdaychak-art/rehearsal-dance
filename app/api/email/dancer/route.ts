@@ -222,8 +222,22 @@ export async function POST(req: NextRequest) {
       }
       if (fromDate || toDate) {
         where.date = {};
-        if (fromDate) where.date.gte = fromDate;
-        if (toDate) where.date.lte = toDate;
+        if (fromDate) {
+          // Create UTC date from the original input string to avoid timezone shift
+          // Parse the date string (YYYY-MM-DD) and create UTC midnight
+          if (from) {
+            const [year, month, day] = from.split('-').map(Number);
+            where.date.gte = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+          }
+        }
+        if (toDate) {
+          // Create UTC date from the original input string to avoid timezone shift
+          // Parse the date string (YYYY-MM-DD) and create UTC end of day
+          if (to) {
+            const [year, month, day] = to.split('-').map(Number);
+            where.date.lte = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+          }
+        }
       }
 
       const items = await prisma.scheduledRoutine.findMany({
@@ -240,13 +254,11 @@ export async function POST(req: NextRequest) {
         room: { name: string };
       }) => {
         // Normalize date to local timezone to avoid UTC shift
-        // Prisma stores dates as DateTime (UTC), so we use UTC getters to get the actual date
-        // then create a new Date in local timezone with those components
+        // Extract the date part (YYYY-MM-DD) from the ISO string to avoid timezone conversion issues
         const dateObj = it.date instanceof Date ? it.date : new Date(it.date);
-        const year = dateObj.getUTCFullYear();
-        const month = dateObj.getUTCMonth();
-        const day = dateObj.getUTCDate();
-        const normalizedDate = new Date(year, month, day, 0, 0, 0, 0);
+        const isoDateString = dateObj.toISOString().split('T')[0]; // Get YYYY-MM-DD
+        const [year, month, day] = isoDateString.split('-').map(Number);
+        const normalizedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
         
         return {
           date: normalizedDate,
@@ -371,13 +383,11 @@ export async function POST(req: NextRequest) {
           room: { name: string };
         }) => {
           // Normalize date to local timezone to avoid UTC shift
-          // Prisma stores dates as DateTime (UTC), so we use UTC getters to get the actual date
-          // then create a new Date in local timezone with those components
+          // Extract the date part (YYYY-MM-DD) from the ISO string to avoid timezone conversion issues
           const dateObj = it.date instanceof Date ? it.date : new Date(it.date);
-          const year = dateObj.getUTCFullYear();
-          const month = dateObj.getUTCMonth();
-          const day = dateObj.getUTCDate();
-          const normalizedDate = new Date(year, month, day, 0, 0, 0, 0);
+          const isoDateString = dateObj.toISOString().split('T')[0]; // Get YYYY-MM-DD
+          const [year, month, day] = isoDateString.split('-').map(Number);
+          const normalizedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
           
           return {
             date: normalizedDate,

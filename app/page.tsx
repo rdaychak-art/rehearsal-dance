@@ -359,13 +359,13 @@ export default function Home() {
       setScheduledRoutines(prev => {
         // Get the updated routine's scheduledHours by checking routines state after update
         return prev.map(sr => {
-          if (sr.routineId === saved.id) {
-            // Update the routine data and recalculate endTime if duration changed
-            const newDuration = saved.duration;
-            const startMinutes = sr.startTime.hour * 60 + sr.startTime.minute;
-            const endMinutes = startMinutes + newDuration;
-            const endHour = Math.floor(endMinutes / 60);
-            const endMinute = endMinutes % 60;
+        if (sr.routineId === saved.id) {
+          // Update the routine data and recalculate endTime if duration changed
+          const newDuration = saved.duration;
+          const startMinutes = sr.startTime.hour * 60 + sr.startTime.minute;
+          const endMinutes = startMinutes + newDuration;
+          const endHour = Math.floor(endMinutes / 60);
+          const endMinute = endMinutes % 60;
             
             // Use scheduledHours from the existing scheduled routine (preserves actual value)
             const scheduledHours = sr.routine?.scheduledHours || 0;
@@ -373,15 +373,15 @@ export default function Home() {
               ...saved, 
               scheduledHours: scheduledHours
             };
-            
-            return { 
-              ...sr, 
+          
+          return { 
+            ...sr, 
               routine: routineWithHours, 
-              duration: newDuration,
-              endTime: { hour: endHour, minute: endMinute, day: sr.startTime.day }
-            };
-          }
-          return sr;
+            duration: newDuration,
+            endTime: { hour: endHour, minute: endMinute, day: sr.startTime.day }
+          };
+        }
+        return sr;
         });
       });
       

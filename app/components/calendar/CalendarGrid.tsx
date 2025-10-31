@@ -380,15 +380,15 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                   const monthName = date.toLocaleDateString('en-US', { month: 'short' });
                   
                   return (
-                    <div key={dayIndex} className="border-r border-gray-200 last:border-r-0" style={{ minWidth: `${activeRooms.length * 120}px` }}>
-                      <div className="bg-gray-50 border-b border-gray-200 p-4 text-center">
-                        <div className="font-semibold text-gray-900 text-base">
+                  <div key={dayIndex} className="border-r border-gray-200 last:border-r-0" style={{ minWidth: `${activeRooms.length * 120}px` }}>
+                    <div className="bg-gray-50 border-b border-gray-200 p-4 text-center">
+                      <div className="font-semibold text-gray-900 text-base">
                           {getShortDayName(dayOfWeek)}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {monthName} {dayNumber}
-                        </div>
                       </div>
+                      <div className="text-sm text-gray-600">
+                          {monthName} {dayNumber}
+                      </div>
+                    </div>
                     
                     {/* Room headers for this day */}
                     <div className="flex">
@@ -398,7 +398,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                         </div>
                       ))}
                     </div>
-                    </div>
+                  </div>
                   );
                 })}
               </>

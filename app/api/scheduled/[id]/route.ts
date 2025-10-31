@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { Prisma } from '@prisma/client';
 
+// Helper to parse YYYY-MM-DD to local Date (midnight local time)
+function parseLocalDate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -13,7 +19,7 @@ export async function PATCH(
     const updated = await prisma.scheduledRoutine.update({
       where: { id: params.id },
       data: {
-        ...(date ? { date: new Date(date) } : {}),
+        ...(date ? { date: parseLocalDate(date) } : {}),
         ...(typeof startMinutes === 'number' ? { startMinutes } : {}),
         ...(typeof duration === 'number' ? { duration } : {}),
         ...(routineId ? { routineId } : {}),

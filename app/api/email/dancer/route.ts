@@ -10,6 +10,20 @@ interface SendEmailRequestBody {
   levelIds?: string[];
 }
 
+// Helper to parse YYYY-MM-DD to local Date (midnight local time)
+function parseLocalDate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
+// Helper to format Date to YYYY-MM-DD string
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getDateRangeFromPreset(preset: 'this_week' | 'next_week' | 'this_month'): { from: Date; to: Date } {
   const now = new Date();
 
@@ -166,19 +180,14 @@ export async function POST(req: NextRequest) {
       rangeLabel = preset === 'this_week' ? 'this week' : preset === 'next_week' ? 'next week' : 'this month';
     } else if (from || to) {
       if (from) {
-        // Parse date string in local timezone to avoid UTC issues
-        const [year, month, day] = from.split('-').map(Number);
-        fromDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+        fromDate = parseLocalDate(from);
       }
       if (to) {
-        // Parse date string in local timezone and set to end of that day
-        // This ensures we only include up to and including the selected end date
-        const [year, month, day] = to.split('-').map(Number);
-        toDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+        const toLocal = parseLocalDate(to);
+        toLocal.setHours(23, 59, 59, 999);
+        toDate = toLocal;
       }
-      const fromStr = fromDate ? fromDate.toISOString().slice(0, 10) : '';
-      const toStr = toDate ? toDate.toISOString().slice(0, 10) : '';
-      rangeLabel = `${fromStr}${fromStr && toStr ? ' to ' : ''}${toStr}` || 'selected dates';
+      rangeLabel = `${from || ''}${from && to ? ' to ' : ''}${to || ''}` || 'selected dates';
     } else {
       // Default to this week
       const { from: f, to: t } = getDateRangeFromPreset('this_week');
@@ -223,20 +232,10 @@ export async function POST(req: NextRequest) {
       if (fromDate || toDate) {
         where.date = {};
         if (fromDate) {
-          // Create UTC date from the original input string to avoid timezone shift
-          // Parse the date string (YYYY-MM-DD) and create UTC midnight
-          if (from) {
-            const [year, month, day] = from.split('-').map(Number);
-            where.date.gte = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
-          }
+          where.date.gte = fromDate;
         }
         if (toDate) {
-          // Create UTC date from the original input string to avoid timezone shift
-          // Parse the date string (YYYY-MM-DD) and create UTC end of day
-          if (to) {
-            const [year, month, day] = to.split('-').map(Number);
-            where.date.lte = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
-          }
+          where.date.lte = toDate;
         }
       }
 
@@ -253,12 +252,11 @@ export async function POST(req: NextRequest) {
         routine: { songTitle: string; teacher: { name: string } };
         room: { name: string };
       }) => {
-        // Normalize date to local timezone to avoid UTC shift
-        // Extract the date part (YYYY-MM-DD) from the ISO string to avoid timezone conversion issues
+        // Convert Date from database to local date string, then parse back to local Date
+        // This ensures we work with the actual calendar date, not UTC time
         const dateObj = it.date instanceof Date ? it.date : new Date(it.date);
-        const isoDateString = dateObj.toISOString().split('T')[0]; // Get YYYY-MM-DD
-        const [year, month, day] = isoDateString.split('-').map(Number);
-        const normalizedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+        const dateString = formatLocalDate(dateObj);
+        const normalizedDate = parseLocalDate(dateString);
         
         return {
           date: normalizedDate,
@@ -382,12 +380,11 @@ export async function POST(req: NextRequest) {
           routine: { songTitle: string; dancers: Array<{ name: string }> };
           room: { name: string };
         }) => {
-          // Normalize date to local timezone to avoid UTC shift
-          // Extract the date part (YYYY-MM-DD) from the ISO string to avoid timezone conversion issues
+          // Convert Date from database to local date string, then parse back to local Date
+          // This ensures we work with the actual calendar date, not UTC time
           const dateObj = it.date instanceof Date ? it.date : new Date(it.date);
-          const isoDateString = dateObj.toISOString().split('T')[0]; // Get YYYY-MM-DD
-          const [year, month, day] = isoDateString.split('-').map(Number);
-          const normalizedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+          const dateString = formatLocalDate(dateObj);
+          const normalizedDate = parseLocalDate(dateString);
           
           return {
             date: normalizedDate,

@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 import { Prisma } from '@prisma/client';
 
+// Helper to parse YYYY-MM-DD to local Date (midnight local time)
+function parseLocalDate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const from = searchParams.get('from');
@@ -10,8 +16,14 @@ export async function GET(req: NextRequest) {
   const where: { date?: { gte?: Date; lte?: Date } } = {};
   if (from || to) {
     where.date = {};
-    if (from) where.date.gte = new Date(from);
-    if (to) where.date.lte = new Date(to);
+    if (from) {
+      where.date.gte = parseLocalDate(from);
+    }
+    if (to) {
+      const toDate = parseLocalDate(to);
+      toDate.setHours(23, 59, 59, 999);
+      where.date.lte = toDate;
+    }
   }
 
   const items = await prisma.scheduledRoutine.findMany({
@@ -29,7 +41,7 @@ export async function POST(req: NextRequest) {
   try {
     const created = await prisma.scheduledRoutine.create({
       data: {
-        date: new Date(date),
+        date: parseLocalDate(date),
         startMinutes,
         duration,
         routineId,

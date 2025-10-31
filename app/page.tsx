@@ -112,7 +112,12 @@ export default function Home() {
           dancersRes.json(), routinesRes.json(), scheduledRes.json()
         ]);
         setDancers(dancersJson);
-        setRoutines(routinesJson);
+        // Ensure all routines have scheduledHours set (default to 0 if missing)
+        const routinesWithHours = routinesJson.map((r: Routine) => ({
+          ...r,
+          scheduledHours: r.scheduledHours ?? 0
+        }));
+        setRoutines(routinesWithHours);
         // Map scheduled API to front-end ScheduledRoutine shape if needed
         const mapped: ScheduledRoutine[] = scheduledJson.map((it: {
           id: string;
@@ -250,8 +255,24 @@ export default function Home() {
       // Extract dancer IDs
       const dancerIds = updatedRoutine.dancers?.map(d => d.id) || [];
       
-      // Check if this is a new routine (temporary ID) or existing one
-      const isNewRoutine = updatedRoutine.id.startsWith('routine-') || !routines.some(r => r.id === updatedRoutine.id);
+      // Determine if this is a new routine by checking against current state
+      // Use functional update to check current state
+      let isNewRoutine = false;
+      setRoutines(currentRoutines => {
+        // A routine is new if:
+        // 1. It has a temporary ID starting with 'routine-', OR
+        // 2. It doesn't exist in the current routines state
+        const hasTempId = updatedRoutine.id.startsWith('routine-');
+        const existsInState = currentRoutines.some(r => r.id === updatedRoutine.id);
+        isNewRoutine = hasTempId || !existsInState;
+        return currentRoutines; // Don't change state yet
+      });
+      
+      console.log('Saving routine:', {
+        isNewRoutine,
+        id: updatedRoutine.id,
+        songTitle: updatedRoutine.songTitle
+      });
       
       // Save to database
       const res = await fetch('/api/routines', {
@@ -271,39 +292,98 @@ export default function Home() {
         }),
       });
       
-      if (!res.ok) throw new Error('Failed to save routine');
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('API Error:', errorText);
+        throw new Error(`Failed to save routine: ${errorText}`);
+      }
       const saved = await res.json();
       
-      // Update the routine in the routines array
-      // If it was a new routine, replace it with the saved version (with DB ID)
-      // Otherwise, update the existing one
+      console.log('Saved routine from API:', {
+        id: saved.id,
+        songTitle: saved.songTitle,
+        originalId: updatedRoutine.id,
+        isNewRoutine
+      });
+      
+      // Update both routines and scheduledRoutines together
+      // Get current state to check for existing routine and preserve scheduledHours
       setRoutines(prev => {
+        // For updates: check if routine exists by saved.id (the real database ID)
+        // For new routines: check if it exists by the temp ID or the saved.id
+        const existingRoutine = prev.find(r => 
+          r.id === saved.id || (!isNewRoutine && r.id === updatedRoutine.id)
+        );
+        
         if (isNewRoutine) {
-          // Remove temp routine and add saved one
-          return prev.filter(r => r.id !== updatedRoutine.id).concat(saved);
+          // Remove temp routine (if it exists) and add saved one with scheduledHours set to 0
+          // Also check if saved.id already exists to avoid duplicates
+          const filtered = prev.filter(r => r.id !== updatedRoutine.id && r.id !== saved.id);
+          
+          console.log('[NEW] Adding new routine:', {
+            savedId: saved.id,
+            filteredCount: filtered.length,
+            prevCount: prev.length
+          });
+          
+          return [...filtered, { ...saved, scheduledHours: 0 }];
         }
-        return prev.map(r => r.id === saved.id ? saved : r);
+        
+        // For updates: find and update existing routine
+        if (!existingRoutine) {
+          console.error(`[UPDATE] Routine with id ${saved.id} not found in state. Original ID: ${updatedRoutine.id}`);
+          console.error('Current routine IDs:', prev.map(r => ({ id: r.id, songTitle: r.songTitle })));
+          // CRITICAL: Don't add duplicate - return current state unchanged
+          // If we can't find the routine, something is wrong with the state
+          return prev;
+        }
+        
+        // Update the existing routine in place, preserving scheduledHours
+        console.log(`[UPDATE] Updating routine ${saved.id}, preserving scheduledHours: ${existingRoutine.scheduledHours}`);
+        
+        // Use map to update in place - ensure we update by both saved.id and original id
+        return prev.map(r => {
+          // Update if it matches either the saved ID or the original updated ID
+          if (r.id === saved.id || (!isNewRoutine && r.id === updatedRoutine.id)) {
+            return { 
+              ...saved, 
+              scheduledHours: r.scheduledHours || 0 
+            };
+          }
+          return r;
+        });
       });
       
       // Also update all scheduled routines that reference this routine
-      setScheduledRoutines(prev => prev.map(sr => {
-        if (sr.routineId === saved.id) {
-          // Update the routine data and recalculate endTime if duration changed
-          const newDuration = saved.duration;
-          const startMinutes = sr.startTime.hour * 60 + sr.startTime.minute;
-          const endMinutes = startMinutes + newDuration;
-          const endHour = Math.floor(endMinutes / 60);
-          const endMinute = endMinutes % 60;
-          
-          return { 
-            ...sr, 
-            routine: saved, 
-            duration: newDuration,
-            endTime: { hour: endHour, minute: endMinute, day: sr.startTime.day }
-          };
-        }
-        return sr;
-      }));
+      // Need to get the updated routine with preserved scheduledHours
+      setScheduledRoutines(prev => {
+        // Get the updated routine's scheduledHours by checking routines state after update
+        return prev.map(sr => {
+          if (sr.routineId === saved.id) {
+            // Update the routine data and recalculate endTime if duration changed
+            const newDuration = saved.duration;
+            const startMinutes = sr.startTime.hour * 60 + sr.startTime.minute;
+            const endMinutes = startMinutes + newDuration;
+            const endHour = Math.floor(endMinutes / 60);
+            const endMinute = endMinutes % 60;
+            
+            // Use scheduledHours from the existing scheduled routine (preserves actual value)
+            const scheduledHours = sr.routine?.scheduledHours || 0;
+            const routineWithHours = { 
+              ...saved, 
+              scheduledHours: scheduledHours
+            };
+            
+            return { 
+              ...sr, 
+              routine: routineWithHours, 
+              duration: newDuration,
+              endTime: { hour: endHour, minute: endMinute, day: sr.startTime.day }
+            };
+          }
+          return sr;
+        });
+      });
       
       toast.success('Routine saved successfully');
       setShowRoutineModal(false);
@@ -315,7 +395,7 @@ export default function Home() {
     } finally {
       setIsSavingRoutine(false);
     }
-  }, [routines]);
+  }, []);
 
   const handleDeleteRoutine = useCallback((routineId: string) => {
     setRoutines(prev => prev.filter(r => r.id !== routineId));

@@ -46,39 +46,45 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const getDatesForView = (date: Date, view: ViewMode): Date[] => {
     const dates: Date[] = [];
     
+    // Helper to normalize date to midnight in local timezone
+    const normalizeDate = (d: Date): Date => {
+      const normalized = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+      return normalized;
+    };
+    
     switch (view) {
       case 'day': {
         // Single day
-        dates.push(new Date(date));
+        dates.push(normalizeDate(date));
         break;
       }
       case '4days': {
         // 4 consecutive days starting from the current date
+        const baseDate = normalizeDate(date);
         for (let i = 0; i < 4; i++) {
-          const day = new Date(date);
-          day.setDate(date.getDate() + i);
+          const day = new Date(baseDate);
+          day.setDate(baseDate.getDate() + i);
           dates.push(day);
         }
         break;
       }
       case 'week': {
         // Week starting from Sunday
-        const start = new Date(date);
-        const day = start.getDay();
-        const diff = start.getDate() - day;
-        start.setDate(diff);
+        const baseDate = normalizeDate(date);
+        const dayOfWeek = baseDate.getDay();
+        const diff = baseDate.getDate() - dayOfWeek;
+        const start = new Date(baseDate.getFullYear(), baseDate.getMonth(), diff, 0, 0, 0, 0);
         
         for (let i = 0; i < 7; i++) {
-          const day = new Date(start);
-          day.setDate(start.getDate() + i);
+          const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i, 0, 0, 0, 0);
           dates.push(day);
         }
         break;
       }
       case 'month': {
         // Full month calendar grid
-        const start = new Date(date.getFullYear(), date.getMonth(), 1);
-        const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        const start = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 0, 0, 0, 0);
         
         // Start from the Sunday of the week containing the first day of the month
         const firstDay = start.getDay();
@@ -91,7 +97,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         
         const current = new Date(start);
         while (current <= end) {
-          dates.push(new Date(current));
+          dates.push(new Date(current.getFullYear(), current.getMonth(), current.getDate(), 0, 0, 0, 0));
           current.setDate(current.getDate() + 1);
         }
         break;
@@ -367,16 +373,22 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             ) : (
               // Day, 4 Days, Week views: Time-based grid headers
               <>
-                {viewDates.map((date, dayIndex) => (
-                  <div key={dayIndex} className="border-r border-gray-200 last:border-r-0" style={{ minWidth: `${activeRooms.length * 120}px` }}>
-                    <div className="bg-gray-50 border-b border-gray-200 p-4 text-center">
-                      <div className="font-semibold text-gray-900 text-base">
-                        {getShortDayName(date.getDay())}
+                {viewDates.map((date, dayIndex) => {
+                  // Ensure we're using the correct day of week for this date
+                  const dayOfWeek = date.getDay();
+                  const dayNumber = date.getDate();
+                  const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+                  
+                  return (
+                    <div key={dayIndex} className="border-r border-gray-200 last:border-r-0" style={{ minWidth: `${activeRooms.length * 120}px` }}>
+                      <div className="bg-gray-50 border-b border-gray-200 p-4 text-center">
+                        <div className="font-semibold text-gray-900 text-base">
+                          {getShortDayName(dayOfWeek)}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {monthName} {dayNumber}
+                        </div>
                       </div>
-                      <div className="text-sm text-gray-600">
-                        {date.getDate()}
-                      </div>
-                    </div>
                     
                     {/* Room headers for this day */}
                     <div className="flex">
@@ -386,8 +398,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                         </div>
                       ))}
                     </div>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </>
             )}
           </div>

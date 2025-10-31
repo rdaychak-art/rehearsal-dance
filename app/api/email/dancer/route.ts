@@ -75,8 +75,13 @@ function buildEmailText(dancerName: string, items: Array<{ date: Date; startMinu
     const start = formatMinutesToHHMM(it.startMinutes);
     const endTotal = it.startMinutes + it.duration;
     const end = formatMinutesToHHMM(endTotal);
-    const dayName = dayNameFromDate(it.date);
-    return `${dayName} ${it.date.toISOString().slice(0, 10)} - ${formatTime(start.hour, start.minute)} to ${formatTime(end.hour, end.minute)}\n  Routine: ${it.songTitle}\n  Room: ${it.roomName}\n  Teacher: ${it.teacherName}`;
+    const formattedDate = it.date.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    return `${formattedDate} - ${formatTime(start.hour, start.minute)} to ${formatTime(end.hour, end.minute)}\n  Routine: ${it.songTitle}\n  Room: ${it.roomName}\n  Teacher: ${it.teacherName}`;
   }).join('\n\n');
 
   return `Hi ${dancerName},\n\nHere's your rehearsal schedule for ${rangeLabel}:\n\n${lines}\n\nPlease arrive 10 minutes early for warm-up.\n\nSincerely, Performing Dance Arts.`;
@@ -91,9 +96,14 @@ function buildTeacherEmailText(teacherName: string, items: Array<{ date: Date; s
     const start = formatMinutesToHHMM(it.startMinutes);
     const endTotal = it.startMinutes + it.duration;
     const end = formatMinutesToHHMM(endTotal);
-    const dayName = dayNameFromDate(it.date);
+    const formattedDate = it.date.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
     const dancersList = it.dancerNames.length > 0 ? `\n  Dancers: ${it.dancerNames.join(', ')}` : '';
-    return `${dayName} ${it.date.toISOString().slice(0, 10)} - ${formatTime(start.hour, start.minute)} to ${formatTime(end.hour, end.minute)}\n  Routine: ${it.songTitle}\n  Room: ${it.roomName}${dancersList}`;
+    return `${formattedDate} - ${formatTime(start.hour, start.minute)} to ${formatTime(end.hour, end.minute)}\n  Routine: ${it.songTitle}\n  Room: ${it.roomName}${dancersList}`;
   }).join('\n\n');
 
   return `Hi ${teacherName},\n\nHere are your rehearsal schedules for ${rangeLabel}:\n\n${lines}\n\nSincerely, Performing Dance Arts.`;
@@ -156,12 +166,15 @@ export async function POST(req: NextRequest) {
       rangeLabel = preset === 'this_week' ? 'this week' : preset === 'next_week' ? 'next week' : 'this month';
     } else if (from || to) {
       if (from) {
-        fromDate = new Date(from);
-        fromDate.setHours(0, 0, 0, 0);
+        // Parse date string in local timezone to avoid UTC issues
+        const [year, month, day] = from.split('-').map(Number);
+        fromDate = new Date(year, month - 1, day, 0, 0, 0, 0);
       }
       if (to) {
-        toDate = new Date(to);
-        toDate.setHours(23, 59, 59, 999);
+        // Parse date string in local timezone and set to end of that day
+        // This ensures we only include up to and including the selected end date
+        const [year, month, day] = to.split('-').map(Number);
+        toDate = new Date(year, month - 1, day, 23, 59, 59, 999);
       }
       const fromStr = fromDate ? fromDate.toISOString().slice(0, 10) : '';
       const toStr = toDate ? toDate.toISOString().slice(0, 10) : '';
@@ -225,14 +238,25 @@ export async function POST(req: NextRequest) {
         duration: number;
         routine: { songTitle: string; teacher: { name: string } };
         room: { name: string };
-      }) => ({
-        date: new Date(it.date),
-        startMinutes: it.startMinutes,
-        duration: it.duration,
-        songTitle: it.routine.songTitle,
-        roomName: it.room.name,
-        teacherName: it.routine.teacher.name
-      }));
+      }) => {
+        // Normalize date to local timezone to avoid UTC shift
+        // Prisma stores dates as DateTime (UTC), so we use UTC getters to get the actual date
+        // then create a new Date in local timezone with those components
+        const dateObj = it.date instanceof Date ? it.date : new Date(it.date);
+        const year = dateObj.getUTCFullYear();
+        const month = dateObj.getUTCMonth();
+        const day = dateObj.getUTCDate();
+        const normalizedDate = new Date(year, month, day, 0, 0, 0, 0);
+        
+        return {
+          date: normalizedDate,
+          startMinutes: it.startMinutes,
+          duration: it.duration,
+          songTitle: it.routine.songTitle,
+          roomName: it.room.name,
+          teacherName: it.routine.teacher.name
+        };
+      });
 
       const subject = `Your rehearsal schedule for ${rangeLabel}`;
       const text = buildEmailText(dancer.name, simplified, rangeLabel);
@@ -345,14 +369,25 @@ export async function POST(req: NextRequest) {
           duration: number;
           routine: { songTitle: string; dancers: Array<{ name: string }> };
           room: { name: string };
-        }) => ({
-          date: new Date(it.date),
-          startMinutes: it.startMinutes,
-          duration: it.duration,
-          songTitle: it.routine.songTitle,
-          roomName: it.room.name,
-          dancerNames: it.routine.dancers.map(d => d.name)
-        }));
+        }) => {
+          // Normalize date to local timezone to avoid UTC shift
+          // Prisma stores dates as DateTime (UTC), so we use UTC getters to get the actual date
+          // then create a new Date in local timezone with those components
+          const dateObj = it.date instanceof Date ? it.date : new Date(it.date);
+          const year = dateObj.getUTCFullYear();
+          const month = dateObj.getUTCMonth();
+          const day = dateObj.getUTCDate();
+          const normalizedDate = new Date(year, month, day, 0, 0, 0, 0);
+          
+          return {
+            date: normalizedDate,
+            startMinutes: it.startMinutes,
+            duration: it.duration,
+            songTitle: it.routine.songTitle,
+            roomName: it.room.name,
+            dancerNames: it.routine.dancers.map(d => d.name)
+          };
+        });
 
         const teacherSubject = `Your rehearsal schedule for ${rangeLabel}`;
         const teacherText = buildTeacherEmailText(teacher.name, teacherSimplified, rangeLabel);

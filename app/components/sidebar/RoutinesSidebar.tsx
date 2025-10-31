@@ -9,6 +9,7 @@ import { Search, Plus, Filter, ArrowUpAZ, ArrowDownAZ } from 'lucide-react';
 import { ManageTeachersModal } from '../modals/ManageTeachersModal';
 import { ManageGenresModal } from '../modals/ManageGenresModal';
 import { ManageLevelsModal } from '../modals/ManageLevelsModal';
+import { RoutineFiltersModal } from '../modals/RoutineFiltersModal';
 
 interface RoutinesSidebarProps {
   routines: Routine[];
@@ -38,6 +39,7 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
   const [openTeachers, setOpenTeachers] = useState(false);
   const [openGenres, setOpenGenres] = useState(false);
   const [openLevels, setOpenLevels] = useState(false);
+  const [openFilters, setOpenFilters] = useState(false);
   const [hideInactive, setHideInactive] = useState(false);
   const [sortOrder, setSortOrder] = useState<'A-Z' | 'Z-A' | 'none'>('A-Z');
   const [teachers, setTeachers] = useState<{ id: string; name: string; email?: string | null }[]>([]);
@@ -206,7 +208,7 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
           </button>
         </div>
         {/* Search Bar */}
-        <div className="relative">
+        <div className="relative mb-2">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
@@ -216,104 +218,15 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
-      </div>
-
-      {/* Filters */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center gap-2 mb-3">
-          <Filter className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">Filters</span>
-        </div>
         
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Genre</label>
-            <select
-              value={selectedGenre}
-              onChange={(e) => setSelectedGenre(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Genres</option>
-              {uniqueGenres.map(genre => (
-                <option key={genre} value={genre}>{genre}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Teacher</label>
-            <select
-              value={selectedTeacher}
-              onChange={(e) => setSelectedTeacher(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Teachers</option>
-              {uniqueTeachers.map(teacher => (
-                <option key={teacher} value={teacher}>{teacher}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Level</label>
-            <select
-              value={selectedLevel}
-              onChange={(e) => setSelectedLevel(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Levels</option>
-              {uniqueLevels.map(level => (
-                <option key={level} value={level}>{level}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="pt-2 border-t border-gray-200 space-y-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={hideInactive}
-                onChange={(e) => setHideInactive(e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <span className="text-xs font-medium text-gray-600">Hide inactive routines</span>
-            </label>
-            
-            <button
-              onClick={() => {
-                // Cycle through: A-Z -> Z-A -> A-Z
-                setSortOrder(current => {
-                  if (current === 'A-Z') return 'Z-A';
-                  if (current === 'Z-A') return 'A-Z';
-                  return 'A-Z';
-                });
-              }}
-              className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-colors text-sm font-medium ${
-                sortOrder !== 'none'
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-              title={sortOrder === 'A-Z' ? 'Sort Z-A' : 'Sort A-Z'}
-            >
-              {sortOrder === 'A-Z' ? (
-                <>
-                  <ArrowUpAZ className="w-4 h-4" />
-                  <span>Sort A-Z</span>
-                </>
-              ) : sortOrder === 'Z-A' ? (
-                <>
-                  <ArrowDownAZ className="w-4 h-4" />
-                  <span>Sort Z-A</span>
-                </>
-              ) : (
-                <>
-                  <ArrowUpAZ className="w-4 h-4" />
-                  <span>Unsorted</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+        {/* Filter Button */}
+        <button
+          onClick={() => setOpenFilters(true)}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700"
+        >
+          <Filter className="w-4 h-4" />
+          Filters
+        </button>
       </div>
 
       {/* Routines List */}
@@ -380,6 +293,23 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
           // Propagate changes to parent
           onLevelsChange?.(next);
         }}
+      />
+      <RoutineFiltersModal
+        isOpen={openFilters}
+        onClose={() => setOpenFilters(false)}
+        selectedGenre={selectedGenre}
+        selectedTeacher={selectedTeacher}
+        selectedLevel={selectedLevel}
+        hideInactive={hideInactive}
+        sortOrder={sortOrder}
+        uniqueGenres={uniqueGenres}
+        uniqueTeachers={uniqueTeachers}
+        uniqueLevels={uniqueLevels}
+        onGenreChange={setSelectedGenre}
+        onTeacherChange={setSelectedTeacher}
+        onLevelChange={setSelectedLevel}
+        onHideInactiveChange={setHideInactive}
+        onSortOrderChange={setSortOrder}
       />
     </div>
   );

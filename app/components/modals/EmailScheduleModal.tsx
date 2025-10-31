@@ -66,11 +66,19 @@ Hi ${dancer.name},
 Here's your rehearsal schedule for this week:
 
 ${routines.length === 0 ? 'No rehearsals scheduled this week.' : routines.map(routine => {
-  const dayName = getDayName(routine.startTime.day);
+  // Parse date string (YYYY-MM-DD) in local timezone to avoid UTC shift
+  const [year, month, day] = routine.date.split('-').map(Number);
+  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const formattedDate = date.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
   const startTime = formatTime(routine.startTime.hour, routine.startTime.minute);
   const endTime = formatTime(routine.endTime.hour, routine.endTime.minute);
   
-  return `${dayName} - ${startTime} to ${endTime}
+  return `${formattedDate} - ${startTime} to ${endTime}
   Routine: ${routine.routine.songTitle}
   Room: ${routine.roomId}
   Teacher: ${routine.routine.teacher.name}`;
@@ -87,7 +95,7 @@ Sincerely, Performing Dance Arts.
   const handleCopyToClipboard = async () => {
     if (!selectedDancerData) return;
     
-    const routines = getDancerSchedule(selectedDancers[0]);
+    // Use the filtered routines (already computed in useMemo)
     const scheduleText = formatScheduleText(selectedDancerData, routines);
     
     try {
@@ -102,7 +110,7 @@ Sincerely, Performing Dance Arts.
   const handleDownloadPDF = () => {
     if (!selectedDancerData) return;
     
-    const routines = getDancerSchedule(selectedDancers[0]);
+    // Use the filtered routines (already computed in useMemo)
     const scheduleText = formatScheduleText(selectedDancerData, routines);
     
     // Create a simple text file download
@@ -178,8 +186,6 @@ Sincerely, Performing Dance Arts.
     }
   };
 
-  const routines = selectedDancers.length === 1 ? getDancerSchedule(selectedDancers[0]) : [];
-
   const toISODate = (d: Date) => {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -220,6 +226,42 @@ Sincerely, Performing Dance Arts.
     }
     return { f: from, t: to };
   };
+
+  // Get filtered routines based on date range (matching what the backend sends)
+  const routines = useMemo(() => {
+    if (selectedDancers.length !== 1) return [];
+    
+    // Get all routines for the selected dancer
+    const dancerId = selectedDancers[0];
+    const baseRoutines = scheduledRoutines.filter(routine =>
+      routine.routine.dancers.some(dancer => dancer.id === dancerId)
+    );
+    
+    const range = computePresetRange(preset);
+    
+    // Filter by date range - compare date strings directly
+    return baseRoutines.filter(routine => {
+      const routineDate = routine.date; // ISO date string (YYYY-MM-DD)
+      
+      let fromDateStr: string | null = null;
+      let toDateStr: string | null = null;
+      
+      if (preset === 'custom') {
+        fromDateStr = from || null;
+        toDateStr = to || null;
+      } else {
+        // For presets, use the computed range
+        fromDateStr = range.f || null;
+        toDateStr = range.t || null;
+      }
+      
+      // Compare date strings directly (YYYY-MM-DD format)
+      if (fromDateStr && routineDate < fromDateStr) return false;
+      if (toDateStr && routineDate > toDateStr) return false;
+      
+      return true;
+    });
+  }, [selectedDancers, preset, from, to, scheduledRoutines]);
 
   const canSend = useMemo(() => selectedDancers.length > 0 && !isSending, [selectedDancers.length, isSending]);
 

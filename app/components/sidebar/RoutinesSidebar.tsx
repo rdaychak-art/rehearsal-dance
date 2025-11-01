@@ -102,9 +102,9 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
     });
 
     // Separate routines by status:
-    // - Inactive: manually marked as inactive OR 0 scheduled instances
-    // - Active: 1-5 scheduled instances (not manually marked inactive)
-    // - Maxed: 6+ scheduled instances (not manually marked inactive)
+    // - Inactive: manually marked as inactive (only)
+    // - Active: not manually marked inactive, with 0-5 scheduled instances
+    // - Maxed: not manually marked inactive, with 6+ scheduled instances
     const maxCount = 6;
     const activeRoutines: Routine[] = [];
     const maxedRoutines: Routine[] = [];
@@ -113,12 +113,10 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
     filtered.forEach(routine => {
       const count = routineScheduledCounts[routine.id] || 0;
       const isManuallyInactive = routine.isInactive || false;
-      const hasNoSchedule = count === 0;
       
-      // A routine is inactive if manually marked OR has no scheduled instances
-      const isInactive = isManuallyInactive || hasNoSchedule;
-      
-      if (isInactive) {
+      // A routine is inactive only if manually marked as inactive
+      // New routines with 0 scheduled instances are still considered active
+      if (isManuallyInactive) {
         inactiveRoutines.push(routine);
       } else if (count >= maxCount) {
         maxedRoutines.push(routine);
@@ -245,8 +243,9 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
               const scheduledHours = routineScheduledHours[routine.id] || 0;
               const isMaxed = scheduledCount >= 6;
               const isManuallyInactive = routine.isInactive || false;
-              const hasNoSchedule = scheduledCount === 0;
-              const isInactive = isManuallyInactive || hasNoSchedule;
+              // Only consider routines inactive if manually marked as inactive
+              // Routines with 0 scheduled instances are still considered active
+              const isInactive = isManuallyInactive;
               return (
                 <RoutineCard
                   key={routine.id}

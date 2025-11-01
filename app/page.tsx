@@ -263,18 +263,11 @@ export default function Home() {
       // Extract dancer IDs
       const dancerIds = updatedRoutine.dancers?.map(d => d.id) || [];
       
-      // Determine if this is a new routine by checking against current state
-      // Use functional update to check current state
-      let isNewRoutine = false;
-      setRoutines(currentRoutines => {
-        // A routine is new if:
-        // 1. It has a temporary ID starting with 'routine-', OR
-        // 2. It doesn't exist in the current routines state
-        const hasTempId = updatedRoutine.id.startsWith('routine-');
-        const existsInState = currentRoutines.some(r => r.id === updatedRoutine.id);
-        isNewRoutine = hasTempId || !existsInState;
-        return currentRoutines; // Don't change state yet
-      });
+      // Determine if this is a new routine
+      // Temporary IDs always start with 'routine-' and indicate a new routine
+      // Database IDs are CUIDs (never start with 'routine-')
+      const hasTempId = updatedRoutine.id.startsWith('routine-');
+      const isNewRoutine = hasTempId;
       
       console.log('Saving routine:', {
         isNewRoutine,
@@ -301,9 +294,25 @@ export default function Home() {
       });
       
       if (!res.ok) {
-        const errorText = await res.text();
-        console.error('API Error:', errorText);
-        throw new Error(`Failed to save routine: ${errorText}`);
+        let errorMessage = 'Failed to save routine';
+        const contentType = res.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          try {
+            const errorData = await res.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch {
+            errorMessage = 'Failed to save routine';
+          }
+        } else {
+          try {
+            const errorText = await res.text();
+            errorMessage = errorText || errorMessage;
+          } catch {
+            errorMessage = 'Failed to save routine';
+          }
+        }
+        console.error('API Error:', errorMessage);
+        throw new Error(errorMessage);
       }
       const saved = await res.json();
       

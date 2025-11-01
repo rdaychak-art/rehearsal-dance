@@ -65,6 +65,9 @@ export const RoutineDetailsModal: React.FC<RoutineDetailsModalProps> = ({
 
   if (!isOpen || !editedRoutine) return null;
 
+  // Check if this is a new routine (temp ID starting with 'routine-')
+  const isNewRoutine = editedRoutine.id.startsWith('routine-');
+
   const handleSave = () => {
     onSave(editedRoutine);
   };
@@ -433,14 +436,17 @@ export const RoutineDetailsModal: React.FC<RoutineDetailsModalProps> = ({
 
         {/* Footer */}
         <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
-          <button
-            onClick={handleDelete}
-            disabled={saving}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${saving ? 'opacity-60 cursor-not-allowed text-red-300' : 'text-red-600 hover:bg-red-50'}`}
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete
-          </button>
+          {!isNewRoutine && (
+            <button
+              onClick={handleDelete}
+              disabled={saving}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${saving ? 'opacity-60 cursor-not-allowed text-red-300' : 'text-red-600 hover:bg-red-50'}`}
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          )}
+          {isNewRoutine && <div />}
           
           <div className="flex items-center gap-3">
           <button
@@ -460,7 +466,7 @@ export const RoutineDetailsModal: React.FC<RoutineDetailsModalProps> = ({
             ) : (
               <Save className="w-4 h-4" />
             )}
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? 'Saving...' : isNewRoutine ? 'Add Routine' : 'Save Changes'}
           </button>
           </div>
         </div>

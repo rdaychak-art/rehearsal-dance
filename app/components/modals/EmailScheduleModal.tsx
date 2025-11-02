@@ -30,6 +30,7 @@ export const EmailScheduleModal: React.FC<EmailScheduleModalProps> = ({
   const [preset, setPreset] = useState<Preset>('this_week');
   const [from, setFrom] = useState<string>('');
   const [to, setTo] = useState<string>('');
+  const [fromEmail, setFromEmail] = useState<string>('info@pdato.ca');
   const [isSending, setIsSending] = useState(false);
   const [levels, setLevels] = useState<Level[]>([]);
   const [selectedLevelIds, setSelectedLevelIds] = useState<string[]>([]);
@@ -139,6 +140,7 @@ Sincerely, Performing Dance Arts.
     from?: string;
     to?: string;
     levelIds?: string[];
+    fromEmail?: string;
   }
 
   const handleSendEmail = async () => {
@@ -161,6 +163,9 @@ Sincerely, Performing Dance Arts.
         }
         if (from) payload.from = from;
         if (to) payload.to = to;
+      }
+      if (fromEmail) {
+        payload.fromEmail = fromEmail;
       }
 
       const res = await fetch('/api/email/dancer', {
@@ -660,7 +665,7 @@ Sincerely, Performing Dance Arts.
             </div>
 
             {/* Date Range */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
               <div className="md:col-span-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
                 <select
@@ -694,6 +699,20 @@ Sincerely, Performing Dance Arts.
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                 />
               </div>
+            </div>
+
+            {/* From Email */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">From Email</label>
+              <select
+                value={fromEmail}
+                onChange={(e) => setFromEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="info@pdato.ca">info@pdato.ca</option>
+                <option value="kristen@performingdancearts.ca">kristen@performingdancearts.ca</option>
+                <option value="nicole@performingdancearts.ca">nicole@performingdancearts.ca</option>
+              </select>
             </div>
 
             {/* Schedule Preview */}

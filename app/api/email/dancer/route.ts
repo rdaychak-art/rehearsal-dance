@@ -8,6 +8,7 @@ interface SendEmailRequestBody {
   to?: string;   // ISO date string (YYYY-MM-DD)
   preset?: 'this_week' | 'next_week' | 'this_month';
   levelIds?: string[];
+  fromEmail?: string;
 }
 
 // Helper to parse YYYY-MM-DD to UTC Date (midnight UTC)
@@ -125,9 +126,10 @@ function buildTeacherEmailText(teacherName: string, items: Array<{ date: Date; s
   return `Hi ${teacherName},\n\nHere are your rehearsal schedules for ${rangeLabel}:\n\n${lines}\n\nSincerely, Performing Dance Arts.`;
 }
 
-async function sendWithSendGrid(toEmail: string, toName: string, subject: string, text: string) {
+async function sendWithSendGrid(toEmail: string, toName: string, subject: string, text: string, customFromEmail?: string) {
   const apiKey = process.env.SENDGRID_API_KEY;
-  const fromEmail = process.env.SENDGRID_FROM_EMAIL;
+  const defaultFromEmail = process.env.SENDGRID_FROM_EMAIL;
+  const fromEmail = customFromEmail || defaultFromEmail;
   const fromName = process.env.SENDGRID_FROM_NAME || 'Dance Studio';
 
   if (!apiKey || !fromEmail) {
@@ -163,7 +165,7 @@ async function sendWithSendGrid(toEmail: string, toName: string, subject: string
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as SendEmailRequestBody;
-    const { dancerId, dancerIds, from, to, preset, levelIds } = body;
+    const { dancerId, dancerIds, from, to, preset, levelIds, fromEmail } = body;
     const targetIds = Array.from(new Set((dancerIds && dancerIds.length ? dancerIds : (dancerId ? [dancerId] : []))));
 
     if (!targetIds.length) {
@@ -273,7 +275,7 @@ export async function POST(req: NextRequest) {
       const text = buildEmailText(dancer.name, simplified, rangeLabel);
 
       try {
-        await sendWithSendGrid(email, dancer.name, subject, text);
+        await sendWithSendGrid(email, dancer.name, subject, text, fromEmail);
         results.push({ id, status: 'sent' });
       } catch (e: unknown) {
         const errorMessage = e instanceof Error ? e.message : 'send failed';
@@ -401,7 +403,7 @@ export async function POST(req: NextRequest) {
         const teacherText = buildTeacherEmailText(teacher.name, teacherSimplified, rangeLabel);
 
         try {
-          await sendWithSendGrid(teacher.email, teacher.name, teacherSubject, teacherText);
+          await sendWithSendGrid(teacher.email, teacher.name, teacherSubject, teacherText, fromEmail);
           teacherResults.push({ teacherId, status: 'sent' });
         } catch (e: unknown) {
           const errorMessage = e instanceof Error ? e.message : 'send failed';

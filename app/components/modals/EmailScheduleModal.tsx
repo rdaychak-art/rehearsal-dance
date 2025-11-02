@@ -331,24 +331,19 @@ Sincerely, Performing Dance Arts.
         )) ||
         (dancer.phone && dancer.phone.toLowerCase().includes(searchQuery.toLowerCase()));
       
-      // Filter by level - match dancer's level with selected level names
+      // Filter by level - check if dancer appears in routines with selected levels
       const matchesLevel = selectedLevelIds.length === 0 || (() => {
-        // Get the names of selected levels
-        const selectedLevelNames = levels
-          .filter(level => selectedLevelIds.includes(level.id))
-          .map(level => level.name.toLowerCase());
-        
-        if (selectedLevelNames.length === 0) return true;
-        
-        // Check if dancer's level matches any selected level name
-        if (!dancer.level) return false;
-        
-        const dancerLevelLower = dancer.level.toLowerCase();
-        return selectedLevelNames.some(selectedName => 
-          dancerLevelLower === selectedName ||
-          dancerLevelLower.includes(selectedName) ||
-          selectedName.includes(dancerLevelLower)
-        );
+        // Check if dancer appears in any routine where the routine's level matches selected levels
+        return scheduledRoutines.some(scheduledRoutine => {
+          const routine = scheduledRoutine.routine;
+          
+          // Check if routine has a level and it matches any selected level
+          if (!routine.level || !routine.level.id) return false;
+          if (!selectedLevelIds.includes(routine.level.id)) return false;
+          
+          // Check if this dancer is in this routine
+          return routine.dancers.some(routineDancer => routineDancer.id === dancer.id);
+        });
       })();
       
       return matchesSearch && matchesLevel;
@@ -402,7 +397,7 @@ Sincerely, Performing Dance Arts.
     }
 
     return filtered;
-  }, [dancers, searchQuery, selectedLevelIds, levels, sortField, sortDirection]);
+  }, [dancers, searchQuery, selectedLevelIds, scheduledRoutines, sortField, sortDirection]);
 
   const selectedFilteredDancers = useMemo(() => {
     return filteredAndSortedDancers.filter(d => selectedDancers.includes(d.id));

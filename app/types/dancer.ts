@@ -10,8 +10,6 @@ export interface Dancer {
   email?: string | string[]; // Can be single email or array of emails (semicolon-separated)
   avatar?: string;
   phone?: string; // Primary phone
-  level?: 'beginner' | 'intermediate' | 'advanced';
-  genres?: string[];
 }
 
 export interface DancerSchedule {

@@ -274,28 +274,6 @@ Sincerely, Performing Dance Arts.
     }
   };
 
-  const getLevelColorClasses = (level?: string) => {
-    if (!level) return 'bg-gray-100 text-gray-700';
-    
-    const levelLower = level.toLowerCase();
-    
-    // Map common level names to colors
-    if (levelLower.includes('beginner') || levelLower.includes('basic') || levelLower.includes('entry')) {
-      return 'bg-green-100 text-green-800';
-    } else if (levelLower.includes('intermediate') || levelLower.includes('medium')) {
-      return 'bg-yellow-100 text-yellow-800';
-    } else if (levelLower.includes('advanced') || levelLower.includes('expert') || levelLower.includes('professional')) {
-      return 'bg-red-100 text-red-800';
-    } else if (levelLower.includes('pre-') || levelLower.includes('junior')) {
-      return 'bg-blue-100 text-blue-800';
-    } else if (levelLower.includes('senior')) {
-      return 'bg-purple-100 text-purple-800';
-    }
-    
-    // Default color for unknown levels
-    return 'bg-gray-100 text-gray-700';
-  };
-
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) {
       return <ArrowUpDown className="w-3 h-3 ml-1 inline" />;
@@ -544,15 +522,12 @@ Sincerely, Performing Dance Arts.
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Gender
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Level
-                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {filteredAndSortedDancers.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="px-4 py-8 text-center text-gray-500 text-sm">
+                          <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
                             No dancers found matching your search criteria.
                           </td>
                         </tr>
@@ -609,15 +584,6 @@ Sincerely, Performing Dance Arts.
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                                 {dancer.gender || '-'}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                {dancer.level ? (
-                                  <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${getLevelColorClasses(dancer.level)}`}>
-                                    {dancer.level}
-                                  </span>
-                                ) : (
-                                  '-'
-                                )}
                               </td>
                             </tr>
                           );

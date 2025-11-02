@@ -92,9 +92,6 @@ export const ToolsSidebar: React.FC<ToolsSidebarProps> = ({
                   onClick={() => setSelectedDancer(dancer.id)}
                 >
                   <div className="font-medium">{dancer.name}</div>
-                  {dancer.level && (
-                    <div className="text-gray-500 capitalize">{dancer.level}</div>
-                  )}
                 </div>
               ))
             ) : (

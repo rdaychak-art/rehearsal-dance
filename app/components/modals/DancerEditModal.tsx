@@ -202,25 +202,6 @@ export const DancerEditModal: React.FC<DancerEditModalProps> = ({
               />
             </div>
 
-            {/* Level */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Level
-              </label>
-              <select
-                value={editedDancer.level || ''}
-                onChange={(e) => setEditedDancer(prev => prev ? {
-                  ...prev,
-                  level: e.target.value as 'beginner' | 'intermediate' | 'advanced' | undefined
-                } : null)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select Level</option>
-                <option value="beginner">Beginner</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
-            </div>
           </div>
         </div>
 

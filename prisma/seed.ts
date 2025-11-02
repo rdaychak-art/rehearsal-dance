@@ -50,8 +50,6 @@ async function main() {
       phone: d.phone ?? null,
       email: email,
       avatar: d.avatar ?? null,
-      level: d.level ?? null,
-      genres: d.genres ?? [],
       classes: d.classes ?? [],
     };
     

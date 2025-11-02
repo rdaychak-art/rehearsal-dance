@@ -37,8 +37,6 @@ export async function POST(req: NextRequest) {
           phone: d.phone ?? null,
           email: Array.isArray(d.email) ? d.email.join('; ') : (d.email ?? null),
           avatar: d.avatar ?? null,
-          level: d.level ?? null,
-          genres: d.genres ?? [],
           classes: d.classes ?? [],
         },
         create: {
@@ -52,8 +50,6 @@ export async function POST(req: NextRequest) {
           phone: d.phone ?? null,
           email: Array.isArray(d.email) ? d.email.join('; ') : (d.email ?? null),
           avatar: d.avatar ?? null,
-          level: d.level ?? null,
-          genres: d.genres ?? [],
           classes: d.classes ?? [],
         },
       })

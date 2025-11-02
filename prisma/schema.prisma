@@ -32,8 +32,6 @@ model Dancer {
   id        String    @id @default(cuid())
   name      String
   email     String?
-  level     String?
-  genres    String[]
   age       Int?
   avatar    String?
   birthday  String?

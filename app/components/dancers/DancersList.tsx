@@ -30,8 +30,6 @@ export const DancersList: React.FC<DancersListProps> = ({
   onImportCsv
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterLevel, setFilterLevel] = useState<string>('');
-  const [filterGenre, setFilterGenre] = useState<string>('');
   const [filterClasses, setFilterClasses] = useState<string[]>([]);
   const [showClassDropdown, setShowClassDropdown] = useState(false);
   const [expandedDancers, setExpandedDancers] = useState<Set<string>>(new Set());
@@ -71,24 +69,6 @@ export const DancersList: React.FC<DancersListProps> = ({
   };
 
   // Get unique values for filters
-  const levels = useMemo(() => {
-    const levelSet = new Set<string>();
-    dancers.forEach(d => {
-      if (d.level) levelSet.add(d.level);
-    });
-    return Array.from(levelSet).sort();
-  }, [dancers]);
-
-  const genres = useMemo(() => {
-    const genreSet = new Set<string>();
-    dancers.forEach(d => {
-      if (d.genres) {
-        d.genres.forEach(g => genreSet.add(g));
-      }
-    });
-    return Array.from(genreSet).sort();
-  }, [dancers]);
-
   const classes = useMemo(() => {
     const classSet = new Set<string>();
     dancers.forEach(d => {
@@ -112,20 +92,13 @@ export const DancersList: React.FC<DancersListProps> = ({
         emailStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
         dancer.name.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // Level filter
-      const matchesLevel = filterLevel === '' || dancer.level === filterLevel;
-
-      // Genre filter
-      const matchesGenre = filterGenre === '' ||
-        (dancer.genres && dancer.genres.some(g => g.toLowerCase() === filterGenre.toLowerCase()));
-
       // Class filter
       const matchesClass = filterClasses.length === 0 ||
         (dancer.classes && dancer.classes.some(cls => filterClasses.includes(cls)));
 
-      return matchesSearch && matchesLevel && matchesGenre && matchesClass;
+      return matchesSearch && matchesClass;
     });
-  }, [dancers, searchTerm, filterLevel, filterGenre, filterClasses]);
+  }, [dancers, searchTerm, filterClasses]);
 
   const allVisibleSelected = useMemo(() =>
     filteredDancers.length > 0 && filteredDancers.every(d => selectedIds.has(d.id))
@@ -200,7 +173,7 @@ export const DancersList: React.FC<DancersListProps> = ({
         </div>
 
         {/* Search and Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -210,34 +183,6 @@ export const DancersList: React.FC<DancersListProps> = ({
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-          </div>
-          <div>
-            <select
-              value={filterLevel}
-              onChange={(e) => setFilterLevel(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Levels</option>
-              {levels.map(level => (
-                <option key={level} value={level}>
-                  {level.charAt(0).toUpperCase() + level.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <select
-              value={filterGenre}
-              onChange={(e) => setFilterGenre(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Genres</option>
-              {genres.map(genre => (
-                <option key={genre} value={genre}>
-                  {genre.charAt(0).toUpperCase() + genre.slice(1)}
-                </option>
-              ))}
-            </select>
           </div>
           <div className="relative">
             {/* <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -363,8 +308,6 @@ export const DancersList: React.FC<DancersListProps> = ({
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Birthday</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classes</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Level</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Genres</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Schedule</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12"></th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12"></th>
@@ -459,29 +402,6 @@ export const DancersList: React.FC<DancersListProps> = ({
                         ) : (
                           '-'
                         )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {dancer.level ? (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                          {dancer.level}
-                        </span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {dancer.genres && dancer.genres.length > 0
-                          ? dancer.genres.map((genre, idx) => (
-                              <span
-                                key={idx}
-                                className="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs"
-                              >
-                                {genre}
-                              </span>
-                            ))
-                          : '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

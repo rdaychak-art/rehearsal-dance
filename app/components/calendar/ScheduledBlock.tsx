@@ -17,7 +17,7 @@ interface ScheduledBlockProps {
   hasConflict?: boolean; // externally determined conflict state
 }
 
-export const ScheduledBlock: React.FC<ScheduledBlockProps> = ({ routine, onClick, onDelete, timeInterval = 60, onResizeDuration, snapMinutes = 15, offsetTopPx = 2, hasConflict = false }) => {
+export const ScheduledBlock: React.FC<ScheduledBlockProps> = ({ routine, onClick, onDelete, timeInterval = 30, onResizeDuration, snapMinutes = 15, offsetTopPx = 0, hasConflict = false }) => {
   const duration = routine.duration;
   const slotHeight = 32; // h-8 = 32px
   const minBlockHeight = 20; // ensure visibility/clickability for very short durations
@@ -145,8 +145,8 @@ export const ScheduledBlock: React.FC<ScheduledBlockProps> = ({ routine, onClick
     <div
       ref={ref}
       className={`
-        absolute left-0 right-0 z-10 rounded-lg border-2 select-none overflow-hidden
-        ${isCompact ? 'p-1' : 'p-2'}
+        absolute left-0 right-0 z-10 rounded-lg border select-none overflow-hidden
+        ${isCompact ? 'p-1' : 'p-1'}
         hover:shadow-lg transition-all duration-200 group
         ${isDragging ? 'opacity-50 scale-95' : 'opacity-100'}
         ${hasConflict ? 'border-red-500 bg-red-100 shadow-lg' : 
@@ -157,8 +157,8 @@ export const ScheduledBlock: React.FC<ScheduledBlockProps> = ({ routine, onClick
         backgroundColor: hasConflict ? '#fef2f2' : routine.routine.color + '20', // 20% opacity
         borderColor: hasConflict ? '#ef4444' : routine.routine.color,
         top: `${offsetTopPx}px`,
-        left: '2px',
-        right: '2px'
+        left: '1px',
+        right: '1px'
       }}
       onClick={(e) => {
         if (suppressClickRef.current || resizingRef.current) {

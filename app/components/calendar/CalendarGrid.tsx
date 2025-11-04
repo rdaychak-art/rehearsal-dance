@@ -41,7 +41,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [startHour, setStartHour] = useState(9);
   const [endHour, setEndHour] = useState(21);
-  const [timeInterval, setTimeInterval] = useState(60);
+  const [timeInterval, setTimeInterval] = useState(30);
 
   const getDatesForView = (date: Date, view: ViewMode): Date[] => {
     const dates: Date[] = [];
@@ -454,7 +454,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           {viewMode !== 'month' && (
           <div className="flex" style={{ minWidth: 'max-content' }}>
             {/* Time column */}
-            <div className="w-24 bg-gray-50 border-r border-gray-200 sticky left-0 z-30 flex-shrink-0" style={{ position: 'sticky', left: 0 }}>
+            <div className="w-24 bg-gray-50 border-r border-gray-200 sticky left-0 z-10 flex-shrink-0" style={{ position: 'sticky', left: 0 }}>
               {timeSlots.map(({ hour, minute }, index) => (
                 <div key={index} className="h-8 border-b border-gray-200 flex items-center justify-center bg-white">
                   <span className="text-sm text-gray-600 font-medium">
@@ -528,7 +528,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                         onDelete={onDeleteRoutine}
                                         timeInterval={timeInterval}
                                         onResizeDuration={onResizeRoutineDuration}
-                                        offsetTopPx={2}
+                                        offsetTopPx={0}
                                         hasConflict={hasConflictBlock}
                                       />
                                     )}
@@ -592,7 +592,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                         onDelete={onDeleteRoutine}
                                         timeInterval={timeInterval}
                                         onResizeDuration={onResizeRoutineDuration}
-                                        offsetTopPx={2}
+                                        offsetTopPx={0}
                                         hasConflict={hasConflictBlock}
                                       />
                                     )}

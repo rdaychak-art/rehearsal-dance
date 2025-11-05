@@ -41,7 +41,9 @@ export const ScheduledDancersModal: React.FC<ScheduledDancersModalProps> = ({
 
   const formatDate = (dateString: string) => {
     try {
-      const date = new Date(dateString);
+      // Parse date string (YYYY-MM-DD) in local timezone to avoid UTC shift
+      const [year, month, day] = dateString.split('-').map(Number);
+      const date = new Date(year, month - 1, day, 0, 0, 0, 0);
       return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     } catch {
       return dateString;

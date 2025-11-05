@@ -110,9 +110,17 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const viewDates = getDatesForView(currentDate, viewMode);
   const activeRooms = rooms.filter(room => room.isActive).slice(0, visibleRooms);
 
+  // Helper function to format date as YYYY-MM-DD using local timezone (not UTC)
+  const formatDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Highlight conflicts only where two routines overlap at this exact 15-min slot in this room
   const slotHasDancerConflict = (hh: number, mm: number, date: Date, roomId: string): boolean => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateString(date);
     const slotMinute = hh * 60 + mm;
     // Routine in this room covering this slot
     const routineHere = scheduledRoutines.find(sr => {
@@ -193,7 +201,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
   // Get routine for specific time slot and room
   const getRoutineForSlot = (hour: number, minute: number, date: Date, roomId: string): ScheduledRoutine | null => {
-    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+    const dateStr = formatDateString(date); // YYYY-MM-DD format using local timezone
     return scheduledRoutines.find(routine => 
       routine.roomId === roomId &&
       routine.date === dateStr &&
@@ -416,7 +424,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                     const isToday = date.toDateString() === new Date().toDateString();
                     
                     // Get routines for this day (match by actual date)
-                    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+                    const dateStr = formatDateString(date); // YYYY-MM-DD format using local timezone
                     const dayRoutines = scheduledRoutines.filter(r => r.date === dateStr);
                     
                     return (
@@ -471,7 +479,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                   {activeRooms.map(room => (
                     <div key={room.id} className="border-r border-gray-200 last:border-r-0 flex-shrink-0 bg-white" style={{ width: '120px' }}>
                       {timeSlots.map(({ hour, minute }, timeIndex) => {
-                        const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+                        const dateStr = formatDateString(date); // YYYY-MM-DD format using local timezone
                         // Render sub-slots at 15-min granularity for better drop precision
                         if (timeInterval === 60) {
                           const subMinutes = [0, 15, 30, 45];

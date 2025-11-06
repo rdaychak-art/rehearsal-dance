@@ -31,6 +31,7 @@ export const EmailScheduleModal: React.FC<EmailScheduleModalProps> = ({
   const [from, setFrom] = useState<string>('');
   const [to, setTo] = useState<string>('');
   const [fromEmail, setFromEmail] = useState<string>('info@pdato.ca');
+  const [customMessage, setCustomMessage] = useState<string>('');
   const [isSending, setIsSending] = useState(false);
   const [levels, setLevels] = useState<Level[]>([]);
   const [selectedLevelIds, setSelectedLevelIds] = useState<string[]>([]);
@@ -69,10 +70,9 @@ export const EmailScheduleModal: React.FC<EmailScheduleModalProps> = ({
   const selectedDancerData = selectedDancers.length === 1 ? dancers.find(d => d.id === selectedDancers[0]) : undefined;
 
   const formatScheduleText = (dancer: Dancer, routines: ScheduledRoutine[]) => {
+    const customMsg = customMessage.trim() ? `\n${customMessage.trim()}\n\n` : '';
     const scheduleText = `
-Hi ${dancer.name},
-
-Here's your rehearsal schedule for this week:
+Hi ${dancer.name},${customMsg}Here's your rehearsal schedule for this week:
 
 ${routines.length === 0 ? 'No rehearsals scheduled this week.' : routines.map(routine => {
   // Parse date string (YYYY-MM-DD) in local timezone to avoid UTC shift
@@ -141,6 +141,7 @@ Sincerely, Performing Dance Arts.
     to?: string;
     levelIds?: string[];
     fromEmail?: string;
+    customMessage?: string;
   }
 
   const handleSendEmail = async () => {
@@ -166,6 +167,9 @@ Sincerely, Performing Dance Arts.
       }
       if (fromEmail) {
         payload.fromEmail = fromEmail;
+      }
+      if (customMessage.trim()) {
+        payload.customMessage = customMessage.trim();
       }
 
       const res = await fetch('/api/email/dancer', {
@@ -713,6 +717,23 @@ Sincerely, Performing Dance Arts.
                 <option value="kristen@performingdancearts.ca">kristen@performingdancearts.ca</option>
                 <option value="nicole@performingdancearts.ca">nicole@performingdancearts.ca</option>
               </select>
+            </div>
+
+            {/* Custom Message */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Custom Message (optional)
+              </label>
+              <textarea
+                value={customMessage}
+                onChange={(e) => setCustomMessage(e.target.value)}
+                placeholder="Enter any additional information or instructions to include before the schedule..."
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                This message will appear at the beginning of the email, before the schedule.
+              </p>
             </div>
 
             {/* Schedule Preview */}

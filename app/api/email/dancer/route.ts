@@ -9,6 +9,7 @@ interface SendEmailRequestBody {
   preset?: 'this_week' | 'next_week' | 'this_month';
   levelIds?: string[];
   fromEmail?: string;
+  customMessage?: string;
 }
 
 // Helper to parse YYYY-MM-DD to UTC Date (midnight UTC)
@@ -83,9 +84,11 @@ function dayNameFromDate(date: Date): string {
   return names[date.getDay()];
 }
 
-function buildEmailText(dancerName: string, items: Array<{ date: Date; startMinutes: number; duration: number; songTitle: string; roomName: string; teacherName: string }>, rangeLabel: string): string {
+function buildEmailText(dancerName: string, items: Array<{ date: Date; startMinutes: number; duration: number; songTitle: string; roomName: string; teacherName: string }>, rangeLabel: string, customMessage?: string): string {
+  const customMsg = customMessage?.trim() ? `\n${customMessage.trim()}\n\n` : '';
+  
   if (items.length === 0) {
-    return `Hi ${dancerName},\n\nHere's your rehearsal schedule for ${rangeLabel}:\n\nNo rehearsals scheduled in this period.\n\nSincerely, Performing Dance Arts.`;
+    return `Hi ${dancerName},${customMsg}Here's your rehearsal schedule for ${rangeLabel}:\n\nNo rehearsals scheduled in this period.\n\nSincerely, Performing Dance Arts.`;
   }
 
   const lines = items.map((it) => {
@@ -101,12 +104,14 @@ function buildEmailText(dancerName: string, items: Array<{ date: Date; startMinu
     return `${formattedDate} - ${formatTime(start.hour, start.minute)} to ${formatTime(end.hour, end.minute)}\n  Routine: ${it.songTitle}\n  Room: ${it.roomName}\n  Teacher: ${it.teacherName}`;
   }).join('\n\n');
 
-  return `Hi ${dancerName},\n\nHere's your rehearsal schedule for ${rangeLabel}:\n\n${lines}\n\nPlease arrive 10 minutes early for warm-up.\n\nSincerely, Performing Dance Arts.`;
+  return `Hi ${dancerName},${customMsg}Here's your rehearsal schedule for ${rangeLabel}:\n\n${lines}\n\nPlease arrive 10 minutes early for warm-up.\n\nSincerely, Performing Dance Arts.`;
 }
 
-function buildTeacherEmailText(teacherName: string, items: Array<{ date: Date; startMinutes: number; duration: number; songTitle: string; roomName: string; dancerNames: string[] }>, rangeLabel: string): string {
+function buildTeacherEmailText(teacherName: string, items: Array<{ date: Date; startMinutes: number; duration: number; songTitle: string; roomName: string; dancerNames: string[] }>, rangeLabel: string, customMessage?: string): string {
+  const customMsg = customMessage?.trim() ? `\n${customMessage.trim()}\n\n` : '';
+  
   if (items.length === 0) {
-    return `Hi ${teacherName},\n\nHere are your rehearsal schedules for ${rangeLabel}:\n\nNo rehearsals scheduled in this period.\n\nSincerely, Performing Dance Arts.`;
+    return `Hi ${teacherName},${customMsg}Here are your rehearsal schedules for ${rangeLabel}:\n\nNo rehearsals scheduled in this period.\n\nSincerely, Performing Dance Arts.`;
   }
 
   const lines = items.map((it) => {
@@ -123,7 +128,7 @@ function buildTeacherEmailText(teacherName: string, items: Array<{ date: Date; s
     return `${formattedDate} - ${formatTime(start.hour, start.minute)} to ${formatTime(end.hour, end.minute)}\n  Routine: ${it.songTitle}\n  Room: ${it.roomName}${dancersList}`;
   }).join('\n\n');
 
-  return `Hi ${teacherName},\n\nHere are your rehearsal schedules for ${rangeLabel}:\n\n${lines}\n\nSincerely, Performing Dance Arts.`;
+  return `Hi ${teacherName},${customMsg}Here are your rehearsal schedules for ${rangeLabel}:\n\n${lines}\n\nSincerely, Performing Dance Arts.`;
 }
 
 async function sendWithSendGrid(toEmail: string, toName: string, subject: string, text: string, customFromEmail?: string) {
@@ -165,7 +170,7 @@ async function sendWithSendGrid(toEmail: string, toName: string, subject: string
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as SendEmailRequestBody;
-    const { dancerId, dancerIds, from, to, preset, levelIds, fromEmail } = body;
+    const { dancerId, dancerIds, from, to, preset, levelIds, fromEmail, customMessage } = body;
     const targetIds = Array.from(new Set((dancerIds && dancerIds.length ? dancerIds : (dancerId ? [dancerId] : []))));
 
     if (!targetIds.length) {
@@ -272,7 +277,7 @@ export async function POST(req: NextRequest) {
       });
 
       const subject = `Your rehearsal schedule for ${rangeLabel}`;
-      const text = buildEmailText(dancer.name, simplified, rangeLabel);
+      const text = buildEmailText(dancer.name, simplified, rangeLabel, customMessage);
 
       try {
         await sendWithSendGrid(email, dancer.name, subject, text, fromEmail);
@@ -400,7 +405,7 @@ export async function POST(req: NextRequest) {
         });
 
         const teacherSubject = `Your rehearsal schedule for ${rangeLabel}`;
-        const teacherText = buildTeacherEmailText(teacher.name, teacherSimplified, rangeLabel);
+        const teacherText = buildTeacherEmailText(teacher.name, teacherSimplified, rangeLabel, customMessage);
 
         try {
           await sendWithSendGrid(teacher.email, teacher.name, teacherSubject, teacherText, fromEmail);

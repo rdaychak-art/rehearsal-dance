@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Routine } from '../../types/routine';
 import { X, Calendar, Repeat } from 'lucide-react';
+import { formatTime } from '../../utils/timeUtils';
 
 interface ScheduleOptionsModalProps {
   routine: Routine;
@@ -81,7 +82,7 @@ export const ScheduleOptionsModal: React.FC<ScheduleOptionsModalProps> = ({
                 <div>
                   <div className="text-gray-600 mb-1">Time</div>
                   <div className="font-medium text-gray-900">
-                    {new Date(timeSlot.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at {String(timeSlot.hour).padStart(2, '0')}:{String(timeSlot.minute).padStart(2, '0')}
+                    {new Date(timeSlot.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at {formatTime(timeSlot.hour, timeSlot.minute)}
                   </div>
                 </div>
               </div>

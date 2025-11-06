@@ -90,7 +90,7 @@ export const TimeSlot: React.FC<TimeSlotProps> = ({
       
       {/* Conflict overlay outline above blocks */}
       {hasConflict && (
-        <div className="pointer-events-none absolute inset-0 z-20">
+        <div className="pointer-events-none absolute inset-0 z-[15]" style={{ zIndex: 15 }}>
           <div className="absolute inset-0 border-2 border-red-500 rounded-sm"></div>
           <div className="absolute inset-0 ring-2 ring-red-300/40 rounded-sm"></div>
         </div>

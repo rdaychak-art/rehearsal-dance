@@ -145,7 +145,7 @@ export const ScheduledBlock: React.FC<ScheduledBlockProps> = ({ routine, onClick
     <div
       ref={ref}
       className={`
-        absolute left-0 right-0 z-10 rounded-lg border select-none overflow-hidden
+        absolute left-0 right-0 z-[5] rounded-lg border select-none overflow-hidden
         ${isCompact ? 'p-1' : 'p-1'}
         hover:shadow-lg transition-all duration-200 group
         ${isDragging ? 'opacity-50 scale-95' : 'opacity-100'}

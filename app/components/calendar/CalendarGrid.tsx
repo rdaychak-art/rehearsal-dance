@@ -358,9 +358,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       }}>
         <div className="min-w-max bg-gray-50" style={{ minWidth: 'max-content' }}>
           {/* Days Header */}
-          <div className="flex border-b border-gray-200 sticky top-0 bg-white z-20" style={{ minWidth: 'max-content', position: 'sticky', top: 0 }}>
+          <div className="flex border-b border-gray-200 sticky top-0 bg-white z-30" style={{ minWidth: 'max-content', position: 'sticky', top: 0, backgroundColor: '#ffffff' }}>
             {/* Time column header */}
-            <div className={`${viewMode === 'month' ? 'w-24' : 'w-24'} bg-gray-50 border-r border-gray-200 flex items-center justify-center sticky left-0 z-30`} style={{ position: 'sticky', left: 0 }}>
+            <div className={`${viewMode === 'month' ? 'w-24' : 'w-24'} bg-gray-50 border-r border-gray-200 flex items-center justify-center sticky left-0 z-40`} style={{ position: 'sticky', left: 0, backgroundColor: '#f9fafb' }}>
               {viewMode === 'month' ? (
                 <span className="text-xs font-medium text-gray-600"></span>
               ) : (
@@ -418,7 +418,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             <>
               {Array.from({ length: Math.ceil(viewDates.length / 7) }, (_, weekIdx) => (
                 <div key={weekIdx} className="flex border-b border-gray-200">
-                  <div className="w-24 bg-gray-50 border-r border-gray-200 sticky left-0 z-30" style={{ position: 'sticky', left: 0 }}></div>
+                  <div className="w-24 bg-gray-50 border-r border-gray-200 sticky left-0 z-20" style={{ position: 'sticky', left: 0, backgroundColor: '#f9fafb' }}></div>
                   {viewDates.slice(weekIdx * 7, (weekIdx + 1) * 7).map((date, dayIdx) => {
                     const isCurrentMonth = date.getMonth() === currentDate.getMonth();
                     const isToday = date.toDateString() === new Date().toDateString();
@@ -462,9 +462,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           {viewMode !== 'month' && (
           <div className="flex" style={{ minWidth: 'max-content' }}>
             {/* Time column */}
-            <div className="w-24 bg-gray-50 border-r border-gray-200 sticky left-0 z-10 flex-shrink-0" style={{ position: 'sticky', left: 0 }}>
+            <div className="w-24 bg-gray-50 border-r border-gray-200 sticky left-0 z-20 flex-shrink-0" style={{ position: 'sticky', left: 0, backgroundColor: '#f9fafb' }}>
               {timeSlots.map(({ hour, minute }, index) => (
-                <div key={index} className="h-8 border-b border-gray-200 flex items-center justify-center bg-white">
+                <div key={index} className="h-8 border-b border-gray-200 flex items-center justify-center bg-white" style={{ backgroundColor: '#ffffff' }}>
                   <span className="text-sm text-gray-600 font-medium">
                     {formatTime(hour, minute)}
                   </span>

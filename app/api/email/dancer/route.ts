@@ -328,6 +328,16 @@ async function sendWithSendGrid(
   }
 }
 
+// Helper function to parse email string (handles semicolon-separated emails)
+function parseEmails(emailString: string | null): string[] {
+  if (!emailString) return [];
+  // Split by semicolon, trim, and filter out empty strings
+  return emailString
+    .split(";")
+    .map((e) => e.trim())
+    .filter((e) => e.length > 0);
+}
+
 // Helper function to send SSE message
 function sendSSEMessage(data: unknown): string {
   return `data: ${JSON.stringify(data)}\n\n`;
@@ -462,7 +472,7 @@ export async function POST(req: NextRequest) {
           const results: {
             id: string;
             name: string;
-            email: string | null;
+            email: string;
             status: "sent" | "skipped";
             reason?: string;
             duration?: number;
@@ -587,47 +597,57 @@ export async function POST(req: NextRequest) {
 
           const processDancerEmail = async (
             id: string
-          ): Promise<{
-            id: string;
-            name: string;
-            email: string | null;
-            status: "sent" | "skipped";
-            reason?: string;
-            duration?: number;
-          }> => {
-            const emailStartTime = Date.now();
+          ): Promise<
+            {
+              id: string;
+              name: string;
+              email: string;
+              status: "sent" | "skipped";
+              reason?: string;
+              duration?: number;
+            }[]
+          > => {
             const dancer = dancerById.get(id);
             if (!dancer) {
               console.warn(`[EMAIL API] [DANCER ${id}] Not found in database`);
-              return {
-                id,
-                name: "Unknown",
-                email: null,
-                status: "skipped",
-                reason: "not found",
-                duration: Date.now() - emailStartTime,
-              };
+              return [
+                {
+                  id,
+                  name: "Unknown",
+                  email: "",
+                  status: "skipped",
+                  reason: "not found",
+                  duration: 0,
+                },
+              ];
             }
 
-            const email = dancer.email;
-            if (!email) {
+            // Parse all email addresses (handle semicolon-separated)
+            const emailAddresses = parseEmails(dancer.email);
+            if (emailAddresses.length === 0) {
               console.warn(
                 `[EMAIL API] [DANCER ${dancer.name} (${id})] Skipped: No email address`
               );
-              return {
-                id,
-                name: dancer.name,
-                email: null,
-                status: "skipped",
-                reason: "no email",
-                duration: Date.now() - emailStartTime,
-              };
+              return [
+                {
+                  id,
+                  name: dancer.name,
+                  email: "",
+                  status: "skipped",
+                  reason: "no email",
+                  duration: 0,
+                },
+              ];
             }
 
             // Get pre-fetched routines for this dancer
             const items = routinesByDancerId.get(id) || [];
             console.log(
-              `[EMAIL API] [DANCER ${dancer.name} <${email}>] Processing: ${items.length} routines found`
+              `[EMAIL API] [DANCER ${dancer.name}] Processing: ${
+                items.length
+              } routines found, ${
+                emailAddresses.length
+              } email(s): ${emailAddresses.join(", ")}`
             );
 
             const simplified = items.map(
@@ -669,33 +689,35 @@ export async function POST(req: NextRequest) {
               customMessage
             );
 
-            const result = await sendWithSendGrid(
-              email,
-              dancer.name,
-              subject,
-              text,
-              fromEmail
-            );
-            const duration = Date.now() - emailStartTime;
+            // Send email to each address
+            const emailResults = await Promise.all(
+              emailAddresses.map(async (email) => {
+                const emailStartTime = Date.now();
+                const result = await sendWithSendGrid(
+                  email,
+                  dancer.name,
+                  subject,
+                  text,
+                  fromEmail
+                );
+                const duration = Date.now() - emailStartTime;
 
-            if (result.success) {
-              return {
-                id,
-                name: dancer.name,
-                email,
-                status: "sent",
-                duration: result.duration,
-              };
-            } else {
-              return {
-                id,
-                name: dancer.name,
-                email,
-                status: "skipped",
-                reason: result.error || "send failed",
-                duration: result.duration,
-              };
-            }
+                return {
+                  id,
+                  name: dancer.name,
+                  email,
+                  status: result.success
+                    ? ("sent" as const)
+                    : ("skipped" as const),
+                  reason: result.success
+                    ? undefined
+                    : result.error || "send failed",
+                  duration: result.duration,
+                };
+              })
+            );
+
+            return emailResults;
           };
 
           // Process all dancers in batches with progress updates
@@ -721,16 +743,22 @@ export async function POST(req: NextRequest) {
             );
             const batchDuration = Date.now() - batchStartTime;
 
-            const sentInBatch = batchResults.filter(
+            // Flatten results (each dancer can have multiple emails)
+            const flattenedResults = batchResults.flat();
+
+            const sentInBatch = flattenedResults.filter(
               (r) => r.status === "sent"
             ).length;
-            const skippedInBatch = batchResults.filter(
+            const skippedInBatch = flattenedResults.filter(
               (r) => r.status === "skipped"
             ).length;
 
             // Detailed batch logging
             console.log(`[EMAIL API] Batch ${batchNumber} Summary:`);
-            console.log(`[EMAIL API]   - Total: ${batchResults.length}`);
+            console.log(`[EMAIL API]   - Dancers: ${batch.length}`);
+            console.log(
+              `[EMAIL API]   - Total emails: ${flattenedResults.length}`
+            );
             console.log(`[EMAIL API]   - Sent: ${sentInBatch}`);
             console.log(`[EMAIL API]   - Skipped: ${skippedInBatch}`);
             console.log(
@@ -740,7 +768,7 @@ export async function POST(req: NextRequest) {
             );
 
             // Log each result in batch
-            batchResults.forEach((result) => {
+            flattenedResults.forEach((result) => {
               if (result.status === "sent") {
                 console.log(
                   `[EMAIL API]   ✓ ${result.name} <${result.email}> - Sent (${result.duration}ms)`
@@ -748,7 +776,7 @@ export async function POST(req: NextRequest) {
               } else {
                 console.log(
                   `[EMAIL API]   ✗ ${result.name} <${
-                    result.email || "N/A"
+                    result.email
                   }> - Skipped: ${result.reason || "unknown"} (${
                     result.duration
                   }ms)`
@@ -756,8 +784,8 @@ export async function POST(req: NextRequest) {
               }
             });
 
-            results.push(...batchResults);
-            processedCount += batchResults.length;
+            results.push(...flattenedResults);
+            processedCount += flattenedResults.length;
 
             // Update progress after each batch
             controller.enqueue(
@@ -781,8 +809,27 @@ export async function POST(req: NextRequest) {
           }
 
           // Comprehensive dancer summary with detailed logging
+          // Note: results now contains one entry per email address (not per dancer)
           const dancerSent = results.filter((r) => r.status === "sent");
           const dancerSkipped = results.filter((r) => r.status === "skipped");
+
+          // Group by dancer ID to show summary per dancer
+          const dancerEmailMap = new Map<
+            string,
+            { sent: number; skipped: number; emails: string[] }
+          >();
+          results.forEach((r) => {
+            if (!dancerEmailMap.has(r.id)) {
+              dancerEmailMap.set(r.id, { sent: 0, skipped: 0, emails: [] });
+            }
+            const dancerData = dancerEmailMap.get(r.id)!;
+            if (r.status === "sent") {
+              dancerData.sent++;
+              dancerData.emails.push(r.email);
+            } else {
+              dancerData.skipped++;
+            }
+          });
 
           const dancerSummary = {
             total: results.length,
@@ -798,14 +845,34 @@ export async function POST(req: NextRequest) {
           console.log("[EMAIL API] ===== Dancer Email Summary =====");
           console.log("[EMAIL API]", JSON.stringify(dancerSummary, null, 2));
           console.log("[EMAIL API] Successfully sent to dancers:");
+          // Group by dancer to show all emails per dancer
+          const sentByDancer = new Map<
+            string,
+            { name: string; emails: string[] }
+          >();
           dancerSent.forEach((r) => {
-            console.log(`[EMAIL API]   ✓ ${r.name} <${r.email}>`);
+            if (!sentByDancer.has(r.id)) {
+              sentByDancer.set(r.id, { name: r.name, emails: [] });
+            }
+            sentByDancer.get(r.id)!.emails.push(r.email);
+          });
+          sentByDancer.forEach((data, id) => {
+            if (data.emails.length === 1) {
+              console.log(`[EMAIL API]   ✓ ${data.name} <${data.emails[0]}>`);
+            } else {
+              console.log(
+                `[EMAIL API]   ✓ ${data.name} - Sent to ${data.emails.length} email(s):`
+              );
+              data.emails.forEach((email) => {
+                console.log(`[EMAIL API]     - ${email}`);
+              });
+            }
           });
           if (dancerSkipped.length > 0) {
-            console.log("[EMAIL API] Skipped dancers:");
+            console.log("[EMAIL API] Skipped emails:");
             dancerSkipped.forEach((r) => {
               console.log(
-                `[EMAIL API]   ✗ ${r.name} <${r.email || "N/A"}> - Reason: ${
+                `[EMAIL API]   ✗ ${r.name} <${r.email}> - Reason: ${
                   r.reason || "unknown"
                 }`
               );
@@ -1175,7 +1242,7 @@ export async function POST(req: NextRequest) {
 
           const totalDuration = Date.now() - startTime;
 
-          // Build detailed recipient lists
+          // Build detailed recipient lists (one entry per email address)
           const successfulDancers = results
             .filter((r) => r.status === "sent")
             .map((r) => ({ name: r.name, email: r.email }));

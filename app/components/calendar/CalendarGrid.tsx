@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Room } from '../../types/room';
 import { ScheduledRoutine } from '../../types/schedule';
-import { Routine } from '../../types/routine';
+import { Routine, Level } from '../../types/routine';
 import { TimeSlot } from './TimeSlot';
 import { ScheduledBlock } from './ScheduledBlock';
 import { formatTime, getShortDayName, addMinutesToTime } from '../../utils/timeUtils';
 import { findConflicts } from '../../utils/conflictUtils';
-import { ChevronLeft, ChevronRight, Calendar, Save, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Save, AlertCircle, Filter } from 'lucide-react';
 
 interface CalendarGridProps {
   rooms: Room[];
@@ -21,6 +21,7 @@ interface CalendarGridProps {
   hasUnsavedChanges?: boolean;
   onSaveChanges?: () => void;
   onResizeRoutineDuration?: (routine: ScheduledRoutine, newDuration: number) => void;
+  levels?: Level[];
 }
 
 type ViewMode = 'day' | '4days' | 'week' | 'month';
@@ -35,13 +36,23 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   visibleRooms,
   hasUnsavedChanges = false,
   onSaveChanges,
-  onResizeRoutineDuration
+  onResizeRoutineDuration,
+  levels = []
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('4days');
   const [startHour, setStartHour] = useState(9);
   const [endHour, setEndHour] = useState(21);
   const [timeInterval, setTimeInterval] = useState(30);
+  const [selectedLevelId, setSelectedLevelId] = useState<string>('all');
+
+  // Filter scheduled routines by selected level
+  const filteredScheduledRoutines = useMemo(() => {
+    if (selectedLevelId === 'all') {
+      return scheduledRoutines;
+    }
+    return scheduledRoutines.filter(sr => sr.routine.level?.id === selectedLevelId);
+  }, [scheduledRoutines, selectedLevelId]);
 
   const getDatesForView = (date: Date, view: ViewMode): Date[] => {
     const dates: Date[] = [];
@@ -109,6 +120,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
   const viewDates = getDatesForView(currentDate, viewMode);
   const activeRooms = rooms.filter(room => room.isActive).slice(0, visibleRooms);
+  
+  // Use filtered routines for display
+  const displayRoutines = filteredScheduledRoutines;
 
   // Helper function to format date as YYYY-MM-DD using local timezone (not UTC)
   const formatDateString = (date: Date): string => {
@@ -123,7 +137,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     const dateStr = formatDateString(date);
     const slotMinute = hh * 60 + mm;
     // Routine in this room covering this slot
-    const routineHere = scheduledRoutines.find(sr => {
+    const routineHere = displayRoutines.find(sr => {
       if (sr.roomId !== roomId) return false;
       if (sr.date !== dateStr) return false;
       const start = sr.startTime.hour * 60 + sr.startTime.minute;
@@ -133,7 +147,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     if (!routineHere) return false;
     const dancersHere = new Set((routineHere.routine?.dancers || []).map(d => d.id));
     // Any other routine (any room) that also covers this slot and shares a dancer?
-    for (const other of scheduledRoutines) {
+    for (const other of displayRoutines) {
       if (other.id === routineHere.id) continue;
       if (other.date !== dateStr) continue;
       const oStart = other.startTime.hour * 60 + other.startTime.minute;
@@ -202,7 +216,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   // Get routine for specific time slot and room
   const getRoutineForSlot = (hour: number, minute: number, date: Date, roomId: string): ScheduledRoutine | null => {
     const dateStr = formatDateString(date); // YYYY-MM-DD format using local timezone
-    return scheduledRoutines.find(routine => 
+    return displayRoutines.find(routine => 
       routine.roomId === roomId &&
       routine.date === dateStr &&
       routine.startTime.hour === hour &&
@@ -315,6 +329,25 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               </button>
             </div>
             
+            {/* Level Filter */}
+            {levels.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-gray-600" />
+                <select
+                  value={selectedLevelId}
+                  onChange={(e) => setSelectedLevelId(e.target.value)}
+                  className="px-3 py-1 border border-gray-300 rounded text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Levels</option>
+                  {levels.map(level => (
+                    <option key={level.id} value={level.id}>
+                      {level.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
             {viewMode !== 'month' && (
             <div className="flex items-center gap-2">
               <select
@@ -425,7 +458,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                     
                     // Get routines for this day (match by actual date)
                     const dateStr = formatDateString(date); // YYYY-MM-DD format using local timezone
-                    const dayRoutines = scheduledRoutines.filter(r => r.date === dateStr);
+                    const dayRoutines = displayRoutines.filter(r => r.date === dateStr);
                     
                     return (
                       <div
@@ -515,7 +548,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                     }
                                   : null;
                                 const hasConflictBlock = hypothetical
-                                  ? findConflicts(scheduledRoutines, hypothetical, rooms).length > 0
+                                  ? findConflicts(displayRoutines, hypothetical, rooms).length > 0
                                   : false;
                                 return (
                                   <TimeSlot
@@ -579,7 +612,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                                     }
                                   : null;
                                 const hasConflictBlock = hypothetical
-                                  ? findConflicts(scheduledRoutines, hypothetical, rooms).length > 0
+                                  ? findConflicts(displayRoutines, hypothetical, rooms).length > 0
                                   : false;
                                 return (
                                   <TimeSlot
@@ -613,7 +646,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                         // 15-min interval
                         const routine = getRoutineForSlot(hour, minute, date, room.id);
                         const hasConflict = slotHasDancerConflict(hour, minute, date, room.id);
-                        const hasConflictBlock = routine ? findConflicts(scheduledRoutines, routine, rooms).length > 0 : false;
+                        const hasConflictBlock = routine ? findConflicts(displayRoutines, routine, rooms).length > 0 : false;
                         return (
                           <TimeSlot
                             key={timeIndex}

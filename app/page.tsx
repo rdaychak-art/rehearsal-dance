@@ -1349,6 +1349,7 @@ export default function Home() {
                   hasUnsavedChanges={hasUnsavedChanges}
                   onSaveChanges={handleSaveScheduleChanges}
                   onResizeRoutineDuration={(routine, minutes) => handleUpdateScheduledRoutineDuration(routine.id, minutes)}
+                  levels={levels}
                 />
               )}
         </div>

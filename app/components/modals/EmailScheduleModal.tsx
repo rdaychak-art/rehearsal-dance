@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Dancer } from '../../types/dancer';
 import { ScheduledRoutine } from '../../types/schedule';
-import { Level, Routine } from '../../types/routine';
+import { Level, Routine, Teacher } from '../../types/routine';
 import { X, Mail, Download, Copy, Check, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from 'lucide-react';
 import { formatTime, getDayName } from '../../utils/timeUtils';
 import { toast } from 'react-hot-toast';
@@ -37,6 +37,7 @@ export const EmailScheduleModal: React.FC<EmailScheduleModalProps> = ({
   const [selectedLevelIds, setSelectedLevelIds] = useState<string[]>([]);
   const [showLevelDropdown, setShowLevelDropdown] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number; message: string } | null>(null);
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
   
   // Sorting state
   type SortField = 'firstName' | 'lastName' | 'age' | 'email' | 'phone' | 'name';
@@ -55,16 +56,9 @@ export const EmailScheduleModal: React.FC<EmailScheduleModalProps> = ({
       }
     };
     
-    // Load levels when modal opens
+    // Load levels once when modal opens
     if (isOpen) {
       loadLevels();
-      
-      // Refresh levels periodically while modal is open (every 2 seconds)
-      const interval = setInterval(() => {
-        loadLevels();
-      }, 2000);
-      
-      return () => clearInterval(interval);
     }
   }, [isOpen]);
 
@@ -144,6 +138,7 @@ Sincerely, Performing Dance Arts.
     levelIds?: string[];
     fromEmail?: string;
     customMessage?: string;
+    teacherIds?: string[];
   }
 
   const handleSendEmail = async () => {
@@ -174,6 +169,9 @@ Sincerely, Performing Dance Arts.
       }
       if (customMessage.trim()) {
         payload.customMessage = customMessage.trim();
+      }
+      if (selectedTeacherIds.length > 0) {
+        payload.teacherIds = selectedTeacherIds;
       }
 
       const res = await fetch('/api/email/dancer', {
@@ -382,6 +380,89 @@ Sincerely, Performing Dance Arts.
   }, [selectedDancers, preset, from, to, scheduledRoutines, computePresetRange]);
 
   const canSend = useMemo(() => selectedDancers.length > 0 && !isSending, [selectedDancers.length, isSending]);
+
+  // Calculate included teachers based on selected dancers, date range, and level filters
+  const includedTeachers = useMemo(() => {
+    if (selectedDancers.length === 0) return [];
+
+    const range = computePresetRange(preset);
+    let fromDateStr: string | null = null;
+    let toDateStr: string | null = null;
+
+    if (preset === 'custom') {
+      fromDateStr = from || null;
+      toDateStr = to || null;
+    } else {
+      fromDateStr = range.f || null;
+      toDateStr = range.t || null;
+    }
+
+    // Get all routines for selected dancers
+    const relevantRoutines = scheduledRoutines.filter(routine => {
+      // Check if routine includes at least one selected dancer
+      const hasSelectedDancer = routine.routine?.dancers?.some(dancer => 
+        selectedDancers.includes(dancer.id)
+      );
+      if (!hasSelectedDancer) return false;
+
+      // Filter by date range
+      const routineDate = routine.date;
+      if (fromDateStr && routineDate < fromDateStr) return false;
+      if (toDateStr && routineDate > toDateStr) return false;
+
+      // Filter by level if selected
+      if (selectedLevelIds.length > 0) {
+        if (!routine.routine?.level || !selectedLevelIds.includes(routine.routine.level.id)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    // Extract unique teachers
+    const teacherMap = new Map<string, Teacher>();
+    relevantRoutines.forEach(routine => {
+      const teacher = routine.routine?.teacher;
+      if (teacher && teacher.id && !teacherMap.has(teacher.id)) {
+        teacherMap.set(teacher.id, teacher);
+      }
+    });
+
+    const teachers = Array.from(teacherMap.values());
+    console.log('Included teachers calculated:', teachers.length, teachers);
+    return teachers;
+  }, [selectedDancers, preset, from, to, scheduledRoutines, selectedLevelIds, computePresetRange]);
+
+  // Update selectedTeacherIds when includedTeachers changes (set all as selected by default)
+  useEffect(() => {
+    if (includedTeachers.length > 0) {
+      const includedTeacherIds = includedTeachers.map(t => t.id);
+      setSelectedTeacherIds(prev => {
+        const currentSet = new Set(prev);
+        const includedSet = new Set(includedTeacherIds);
+        
+        // Add new teachers that weren't previously selected
+        const newTeachers = includedTeacherIds.filter(id => !currentSet.has(id));
+        
+        // Remove teachers that are no longer included
+        const toRemove = Array.from(currentSet).filter(id => !includedSet.has(id));
+        
+        if (newTeachers.length > 0 || toRemove.length > 0) {
+          return Array.from(new Set([
+            ...prev.filter(id => !toRemove.includes(id)),
+            ...newTeachers
+          ]));
+        }
+        
+        return prev;
+      });
+    } else {
+      // If no teachers included, clear selection
+      setSelectedTeacherIds([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includedTeachers.map(t => t.id).join(',')]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -768,6 +849,77 @@ Sincerely, Performing Dance Arts.
                 </div>
               </div>
             </div>
+
+            {/* Teacher Selection */}
+            {selectedDancers.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Include Teachers {includedTeachers.length > 0 && `(${selectedTeacherIds.length} of ${includedTeachers.length} selected)`}
+                </label>
+                {includedTeachers.length > 0 ? (
+                  <>
+                    <div className="border border-gray-300 rounded-lg p-3 bg-gray-50 max-h-48 overflow-y-auto">
+                      <div className="space-y-2">
+                        {includedTeachers.map(teacher => {
+                          const isSelected = selectedTeacherIds.includes(teacher.id);
+                          return (
+                            <label
+                              key={teacher.id}
+                              className="flex items-center gap-2 p-2 hover:bg-white rounded cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedTeacherIds(prev => [...prev, teacher.id]);
+                                  } else {
+                                    setSelectedTeacherIds(prev => prev.filter(id => id !== teacher.id));
+                                  }
+                                }}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-sm text-gray-700">{teacher.name}</span>
+                              {teacher.email && (
+                                <span className="text-xs text-gray-500 ml-auto">{teacher.email}</span>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {includedTeachers.length > 1 && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (selectedTeacherIds.length === includedTeachers.length) {
+                                setSelectedTeacherIds([]);
+                              } else {
+                                setSelectedTeacherIds(includedTeachers.map(t => t.id));
+                              }
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            {selectedTeacherIds.length === includedTeachers.length
+                              ? 'Deselect All'
+                              : 'Select All'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Teachers who have routines with the selected dancers in the chosen date range.
+                    </p>
+                  </>
+                ) : (
+                  <div className="border border-gray-300 rounded-lg p-3 bg-gray-50">
+                    <p className="text-sm text-gray-500">
+                      No teachers found for the selected dancers in the chosen date range.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Date Range */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">

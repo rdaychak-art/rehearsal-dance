@@ -10,6 +10,7 @@ interface SendEmailRequestBody {
   levelIds?: string[];
   fromEmail?: string;
   customMessage?: string;
+  teacherIds?: string[]; // Optional: filter which teachers to send emails to
 }
 
 // Helper to parse YYYY-MM-DD to UTC Date (midnight UTC)
@@ -168,14 +169,14 @@ async function sendWithSendGrid(toEmail: string, toName: string, subject: string
 }
 
 // Helper function to send SSE message
-function sendSSEMessage(data: any): string {
+function sendSSEMessage(data: unknown): string {
   return `data: ${JSON.stringify(data)}\n\n`;
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as SendEmailRequestBody;
-    const { dancerId, dancerIds, from, to, preset, levelIds, fromEmail, customMessage } = body;
+    const { dancerId, dancerIds, from, to, preset, levelIds, fromEmail, customMessage, teacherIds } = body;
     const targetIds = Array.from(new Set((dancerIds && dancerIds.length ? dancerIds : (dancerId ? [dancerId] : []))));
 
     if (!targetIds.length) {
@@ -227,72 +228,91 @@ export async function POST(req: NextRequest) {
             type: 'progress', 
             current: 0, 
             total: targetIds.length,
-            message: 'Starting to send emails...'
+            message: 'Fetching schedules...'
           })));
 
-          let currentIndex = 0;
-          for (const id of targetIds) {
-            currentIndex++;
+          // OPTIMIZATION: Fetch all scheduled routines matching filters in ONE query instead of N queries
+          const allScheduledRoutinesWhere: {
+            routine?: {
+              dancers?: { some: { id: { in: string[] } } };
+              levelId?: { in: string[] };
+            };
+            date?: { gte?: Date; lte?: Date };
+          } = {};
+
+          // Build routine filter with both level and dancers if needed
+          if ((levelIds && levelIds.length > 0) || targetIds.length > 0) {
+            allScheduledRoutinesWhere.routine = {};
+            
+            // Apply level filter if provided
+            if (levelIds && levelIds.length > 0) {
+              allScheduledRoutinesWhere.routine.levelId = { in: levelIds };
+            }
+            
+            // If we have target dancers, filter to only routines that include at least one of them
+            if (targetIds.length > 0) {
+              allScheduledRoutinesWhere.routine.dancers = { some: { id: { in: targetIds } } };
+            }
+          }
+
+          // Apply date range filter
+          if (fromDate || toDate) {
+            allScheduledRoutinesWhere.date = {};
+            if (fromDate) {
+              allScheduledRoutinesWhere.date.gte = fromDate;
+            }
+            if (toDate) {
+              allScheduledRoutinesWhere.date.lte = toDate;
+            }
+          }
+
+          // Fetch all relevant scheduled routines in one query
+          const allScheduledRoutines = await prisma.scheduledRoutine.findMany({
+            where: allScheduledRoutinesWhere,
+            include: { 
+              routine: { 
+                include: { 
+                  teacher: true, 
+                  genre: true, 
+                  level: true, 
+                  dancers: true 
+                } 
+              }, 
+              room: true 
+            },
+            orderBy: [{ date: 'asc' }, { startMinutes: 'asc' }]
+          });
+
+          // Group scheduled routines by dancer ID for fast lookup
+          const routinesByDancerId = new Map<string, typeof allScheduledRoutines>();
+          for (const scheduledRoutine of allScheduledRoutines) {
+            for (const dancer of scheduledRoutine.routine.dancers) {
+              if (targetIds.includes(dancer.id)) {
+                if (!routinesByDancerId.has(dancer.id)) {
+                  routinesByDancerId.set(dancer.id, []);
+                }
+                routinesByDancerId.get(dancer.id)!.push(scheduledRoutine);
+              }
+            }
+          }
+
+          // Process dancers in parallel batches
+          const BATCH_SIZE = 10; // Process 10 emails concurrently
+          let processedCount = 0;
+
+          const processDancerEmail = async (id: string): Promise<{ id: string; status: 'sent' | 'skipped'; reason?: string }> => {
             const dancer = dancerById.get(id);
             if (!dancer) {
-              results.push({ id, status: 'skipped', reason: 'not found' });
-              controller.enqueue(encoder.encode(sendSSEMessage({ 
-                type: 'progress', 
-                current: currentIndex, 
-                total: targetIds.length,
-                message: `Skipped ${id} (not found)`
-              })));
-              continue;
+              return { id, status: 'skipped', reason: 'not found' };
             }
+            
             const email = dancer.email;
             if (!email) {
-              results.push({ id, status: 'skipped', reason: 'no email' });
-              controller.enqueue(encoder.encode(sendSSEMessage({ 
-                type: 'progress', 
-                current: currentIndex, 
-                total: targetIds.length,
-                message: `Skipped ${dancer.name} (no email)`
-              })));
-              continue;
+              return { id, status: 'skipped', reason: 'no email' };
             }
 
-            // Send progress update
-            controller.enqueue(encoder.encode(sendSSEMessage({ 
-              type: 'progress', 
-              current: currentIndex, 
-              total: targetIds.length,
-              message: `Sending to ${dancer.name}...`
-            })));
-
-            const where: {
-              routine: { 
-                dancers: { some: { id: string } };
-                levelId?: { in: string[] } | null;
-              };
-              date?: { gte?: Date; lte?: Date };
-            } = {
-              routine: {
-                dancers: { some: { id } }
-              }
-            };
-            if (levelIds && levelIds.length > 0) {
-              where.routine.levelId = { in: levelIds };
-            }
-            if (fromDate || toDate) {
-              where.date = {};
-              if (fromDate) {
-                where.date.gte = fromDate;
-              }
-              if (toDate) {
-                where.date.lte = toDate;
-              }
-            }
-
-            const items = await prisma.scheduledRoutine.findMany({
-              where,
-              include: { routine: { include: { teacher: true, genre: true, level: true, dancers: true } }, room: true },
-              orderBy: [{ date: 'asc' }, { startMinutes: 'asc' }]
-            });
+            // Get pre-fetched routines for this dancer
+            const items = routinesByDancerId.get(id) || [];
 
             const simplified = items.map((it: {
               date: Date;
@@ -323,105 +343,117 @@ export async function POST(req: NextRequest) {
 
             try {
               await sendWithSendGrid(email, dancer.name, subject, text, fromEmail);
-              results.push({ id, status: 'sent' });
+              return { id, status: 'sent' };
             } catch (e: unknown) {
               const errorMessage = e instanceof Error ? e.message : 'send failed';
-              results.push({ id, status: 'skipped', reason: errorMessage });
+              return { id, status: 'skipped', reason: errorMessage };
             }
+          };
+
+          // Process all dancers in batches with progress updates
+          for (let i = 0; i < targetIds.length; i += BATCH_SIZE) {
+            const batch = targetIds.slice(i, i + BATCH_SIZE);
+            const batchResults = await Promise.all(
+              batch.map((id) => processDancerEmail(id))
+            );
+            
+            results.push(...batchResults);
+            processedCount += batchResults.length;
+            
+            // Update progress after each batch
+            const sentInBatch = batchResults.filter(r => r.status === 'sent').length;
+            const skippedInBatch = batchResults.filter(r => r.status === 'skipped').length;
+            controller.enqueue(encoder.encode(sendSSEMessage({ 
+              type: 'progress', 
+              current: processedCount, 
+              total: targetIds.length,
+              message: `Processed batch: ${sentInBatch} sent, ${skippedInBatch} skipped (${processedCount}/${targetIds.length} total)`
+            })));
           }
 
           // Send emails to teachers about routines
           const teacherResults: { teacherId: string; status: 'sent' | 'skipped'; reason?: string }[] = [];
 
-          // Collect all unique teacher IDs from routines that match the dancers/levels/date filters
-          const routineWhere: {
-            levelId?: { in: string[] };
-            dancers?: { some: { id: { in: string[] } } };
-          } = {};
+          // OPTIMIZATION: Get unique teacher IDs from already-fetched routines (teachers who have routines with target dancers)
+          let teacherIdsToEmail = Array.from(new Set(allScheduledRoutines.map(sr => sr.routine.teacherId)));
           
-          if (levelIds && levelIds.length > 0) {
-            routineWhere.levelId = { in: levelIds };
+          // Filter by selected teacherIds if provided
+          if (teacherIds && teacherIds.length > 0) {
+            teacherIdsToEmail = teacherIdsToEmail.filter(id => teacherIds.includes(id));
           }
-          if (targetIds.length > 0) {
-            routineWhere.dancers = { some: { id: { in: targetIds } } };
-          }
-
-          const dateWhere: {
-            gte?: Date;
-            lte?: Date;
-          } = {};
-          if (fromDate) dateWhere.gte = fromDate;
-          if (toDate) dateWhere.lte = toDate;
-
-          // Find all scheduled routines that match the criteria to identify which teachers should get emails
-          const relevantScheduledRoutines = await prisma.scheduledRoutine.findMany({
-            where: {
-              routine: Object.keys(routineWhere).length > 0 ? routineWhere : undefined,
-              date: Object.keys(dateWhere).length > 0 ? dateWhere : undefined
-            },
-            include: {
-              routine: {
-                include: {
-                  teacher: true
-                }
-              }
-            }
-          });
-
-          // Get unique teacher IDs from routines that match the criteria
-          const teacherIds = Array.from(new Set(relevantScheduledRoutines.map(sr => sr.routine.teacherId)));
           
-          if (teacherIds.length > 0) {
+          if (teacherIdsToEmail.length > 0) {
             // Get all teachers with their email addresses
             const teachers = await prisma.teacher.findMany({
-              where: { id: { in: teacherIds } }
+              where: { id: { in: teacherIdsToEmail } }
             });
 
             const teacherById = new Map(teachers.map(t => [t.id, t]));
 
-            // For each teacher, get all their scheduled routines in the date range
-            // This gives teachers their complete schedule for the period
-            for (const teacherId of teacherIds) {
+            // OPTIMIZATION: Fetch ALL routines for these teachers in the date range (not just ones with target dancers)
+            // Teachers should get their complete schedule, but we only email teachers who have routines with target dancers
+            const teacherRoutinesWhere: {
+              routine: { 
+                teacherId: { in: string[] };
+                levelId?: { in: string[] };
+              };
+              date?: { gte?: Date; lte?: Date };
+            } = {
+              routine: {
+                teacherId: { in: teacherIdsToEmail }
+              }
+            };
+
+            // Apply level filter if provided (to match what dancers received)
+            if (levelIds && levelIds.length > 0) {
+              teacherRoutinesWhere.routine.levelId = { in: levelIds };
+            }
+
+            // Apply date range filter
+            if (fromDate || toDate) {
+              teacherRoutinesWhere.date = {};
+              if (fromDate) {
+                teacherRoutinesWhere.date.gte = fromDate;
+              }
+              if (toDate) {
+                teacherRoutinesWhere.date.lte = toDate;
+              }
+            }
+
+            // Fetch all teacher routines in ONE query
+            const allTeacherRoutines = await prisma.scheduledRoutine.findMany({
+              where: teacherRoutinesWhere,
+              include: {
+                routine: {
+                  include: {
+                    teacher: true,
+                    dancers: true
+                  }
+                },
+                room: true
+              },
+              orderBy: [{ date: 'asc' }, { startMinutes: 'asc' }]
+            });
+
+            // OPTIMIZATION: Group scheduled routines by teacher ID
+            const routinesByTeacherId = new Map<string, typeof allTeacherRoutines>();
+            for (const scheduledRoutine of allTeacherRoutines) {
+              const teacherId = scheduledRoutine.routine.teacherId;
+              if (!routinesByTeacherId.has(teacherId)) {
+                routinesByTeacherId.set(teacherId, []);
+              }
+              routinesByTeacherId.get(teacherId)!.push(scheduledRoutine);
+            }
+
+            // Process teachers in parallel batches
+            const processTeacherEmail = async (teacherId: string): Promise<{ teacherId: string; status: 'sent' | 'skipped'; reason?: string }> => {
               const teacher = teacherById.get(teacherId);
               if (!teacher || !teacher.email) {
-                teacherResults.push({ teacherId, status: 'skipped', reason: teacher ? 'no email' : 'not found' });
-                continue;
+                return { teacherId, status: 'skipped', reason: teacher ? 'no email' : 'not found' };
               }
 
-              const teacherWhere: {
-                routine: { teacherId: string; levelId?: { in: string[] } | null };
-                date?: { gte?: Date; lte?: Date };
-              } = {
-                routine: {
-                  teacherId
-                }
-              };
-
-              // Apply level filter if provided (to match what dancers received)
-              if (levelIds && levelIds.length > 0) {
-                teacherWhere.routine.levelId = { in: levelIds };
-              }
-
-              // Apply date range filter
-              if (fromDate || toDate) {
-                teacherWhere.date = {};
-                if (fromDate) teacherWhere.date.gte = fromDate;
-                if (toDate) teacherWhere.date.lte = toDate;
-              }
-
-              const teacherItems = await prisma.scheduledRoutine.findMany({
-                where: teacherWhere,
-                include: {
-                  routine: {
-                    include: {
-                      teacher: true,
-                      dancers: true
-                    }
-                  },
-                  room: true
-                },
-                orderBy: [{ date: 'asc' }, { startMinutes: 'asc' }]
-              });
+              // Get pre-fetched routines for this teacher
+              const teacherItems = routinesByTeacherId.get(teacherId) || [];
 
               const teacherSimplified = teacherItems.map((it: {
                 date: Date;
@@ -451,11 +483,21 @@ export async function POST(req: NextRequest) {
 
               try {
                 await sendWithSendGrid(teacher.email, teacher.name, teacherSubject, teacherText, fromEmail);
-                teacherResults.push({ teacherId, status: 'sent' });
+                return { teacherId, status: 'sent' };
               } catch (e: unknown) {
                 const errorMessage = e instanceof Error ? e.message : 'send failed';
-                teacherResults.push({ teacherId, status: 'skipped', reason: errorMessage });
+                return { teacherId, status: 'skipped', reason: errorMessage };
               }
+            };
+
+            // Process all teachers in batches
+            for (let i = 0; i < teacherIdsToEmail.length; i += BATCH_SIZE) {
+              const batch = teacherIdsToEmail.slice(i, i + BATCH_SIZE);
+              const batchResults = await Promise.all(
+                batch.map((teacherId) => processTeacherEmail(teacherId))
+              );
+              
+              teacherResults.push(...batchResults);
             }
           }
 

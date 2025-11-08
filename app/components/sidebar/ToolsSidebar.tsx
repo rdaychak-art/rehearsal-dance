@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Room } from '../../types/room';
 import { Dancer } from '../../types/dancer';
 import { ScheduledRoutine } from '../../types/schedule';
-import { Search, Settings, Mail, Download, Users, Sliders, AlertTriangle } from 'lucide-react';
+import { Search, Settings, Mail, Download, Users, Sliders } from 'lucide-react';
 
 interface ToolsSidebarProps {
   rooms: Room[];
@@ -14,9 +14,7 @@ interface ToolsSidebarProps {
   onRoomConfigChange: (visibleRooms: number) => void;
   onEmailSchedule: () => void;
   onExportSchedule: () => void;
-  onSingleDayExport?: () => void;
   onShowDancers?: () => void;
-  conflicts?: Array<{dancer: string, routines: string[], time: string}>;
 }
 
 export const ToolsSidebar: React.FC<ToolsSidebarProps> = ({
@@ -27,9 +25,7 @@ export const ToolsSidebar: React.FC<ToolsSidebarProps> = ({
   onRoomConfigChange,
   onEmailSchedule,
   onExportSchedule,
-  onSingleDayExport,
   onShowDancers,
-  conflicts = []
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDancer, setSelectedDancer] = useState<string>('');
@@ -190,16 +186,6 @@ export const ToolsSidebar: React.FC<ToolsSidebarProps> = ({
             <Download className="w-4 h-4" />
             Export PDF
           </button>
-          
-          {onSingleDayExport && (
-            <button
-              onClick={onSingleDayExport}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Download Day PDF
-            </button>
-          )}
         </div>
       </div>
 

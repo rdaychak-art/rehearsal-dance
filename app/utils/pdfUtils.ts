@@ -6,7 +6,8 @@ export const generateSchedulePDF = (scheduledRoutines: ScheduledRoutine[], range
   // Create a simple HTML document for PDF generation
   const htmlContent = generateScheduleHTML(scheduledRoutines, rangeDates, rooms);
   
-  // Open in new window for printing/saving as PDF
+  // Use print dialog method which handles CSS Grid much better
+  // Browsers will remember "Save as PDF" selection after first use
   const printWindow = window.open('', '_blank');
   if (printWindow) {
     printWindow.document.write(htmlContent);
@@ -14,6 +15,7 @@ export const generateSchedulePDF = (scheduledRoutines: ScheduledRoutine[], range
     printWindow.focus();
     
     // Wait for content to load, then trigger print
+    // The browser will remember the last print destination (Save as PDF)
     setTimeout(() => {
       printWindow.print();
     }, 500);
@@ -171,26 +173,26 @@ const generateMultiDayCalendarGridHTML = (scheduledRoutines: ScheduledRoutine[],
         .grid-header > div {
           background: #F3F4F6;
           border: 1px solid #D1D5DB;
-          padding: 12px 8px;
+          padding: 6px 4px;
           text-align: center;
           font-weight: 600;
-          font-size: 13px;
+          font-size: 11px;
           color: #374151;
         }
         .time-column { 
           background: #F9FAFB; 
           text-align: center; 
           font-weight: 500;
-          font-size: 11px;
+          font-size: 9px;
           border: 1px solid #D1D5DB;
-          padding: 8px;
+          padding: 4px;
         }
         .room-header { 
           background: #F3F4F6; 
           text-align: center; 
           font-weight: 600;
-          font-size: 13px;
-          padding: 12px 8px;
+          font-size: 11px;
+          padding: 6px 4px;
           border: 1px solid #D1D5DB;
         }
         .grid-row {
@@ -198,21 +200,21 @@ const generateMultiDayCalendarGridHTML = (scheduledRoutines: ScheduledRoutine[],
         }
         .room-cell {
           border: 1px solid #D1D5DB;
-          padding: 4px;
+          padding: 2px;
           word-wrap: break-word;
           overflow-wrap: break-word;
-          min-height: 12px;
+          min-height: 8px;
           position: relative;
         }
         .room-cell.occupied {
           padding: 0;
         }
         .routine-block { 
-          padding: 4px 6px;
-          margin: 1px 0;
-          border-radius: 4px;
+          padding: 2px 4px;
+          margin: 0;
+          border-radius: 3px;
           background: #EFF6FF;
-          border-left: 3px solid #3B82F6;
+          border-left: 2px solid #3B82F6;
           width: 100%;
           box-sizing: border-box;
           min-height: fit-content;
@@ -220,36 +222,39 @@ const generateMultiDayCalendarGridHTML = (scheduledRoutines: ScheduledRoutine[],
         }
         .routine-title { 
           font-weight: 600; 
-          font-size: 11px; 
+          font-size: 10px; 
           color: #1E40AF;
-          margin-bottom: 4px;
+          margin-bottom: 2px;
+          line-height: 1.2;
           word-wrap: break-word;
           overflow-wrap: break-word;
         }
         .routine-time { 
-          font-size: 10px; 
+          font-size: 9px; 
           color: #475569;
-          margin-bottom: 4px;
+          margin-bottom: 2px;
+          line-height: 1.2;
         }
         .routine-teacher { 
-          font-size: 10px; 
+          font-size: 9px; 
           color: #64748B;
-          margin-bottom: 4px;
+          margin-bottom: 2px;
+          line-height: 1.2;
           word-wrap: break-word;
           overflow-wrap: break-word;
         }
         .routine-dancers { 
-          font-size: 8px; 
+          font-size: 7px; 
           color: #64748B; 
-          line-height: 1.3;
-          margin-top: 4px;
+          line-height: 1.2;
+          margin-top: 2px;
           word-wrap: break-word;
           overflow-wrap: break-word;
           white-space: normal;
         }
         .empty-cell { 
           background: #FAFAFA; 
-          min-height: 12px;
+          min-height: 8px;
         }
         .day-page {
           margin-bottom: 40px;

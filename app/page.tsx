@@ -21,7 +21,6 @@ import { CsvImportModal } from './components/modals/CsvImportModal';
 import { DancerEditModal } from './components/modals/DancerEditModal';
 import { DancerAddModal } from './components/modals/DancerAddModal';
 import { ExportScheduleModal } from './components/modals/ExportScheduleModal';
-import { SingleDayExportModal } from './components/modals/SingleDayExportModal';
 import { ScheduleOptionsModal } from './components/modals/ScheduleOptionsModal';
 import { LoadingOverlay } from './components/common/LoadingOverlay';
 
@@ -40,7 +39,7 @@ import { useConflictDetection } from './hooks/useConflictDetection';
 
 // Utils
 import { addMinutesToTime, formatTime } from './utils/timeUtils';
-import { findConflicts, getRoomOverlaps } from './utils/conflictUtils';
+import { getRoomOverlaps } from './utils/conflictUtils';
 
 export default function Home() {
   // State
@@ -66,7 +65,6 @@ export default function Home() {
   const [showScheduledDancersModal, setShowScheduledDancersModal] = useState(false);
   const [showCsvImportModal, setShowCsvImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [showSingleDayExportModal, setShowSingleDayExportModal] = useState(false);
   const [selectedDancer, setSelectedDancer] = useState<Dancer | null>(null);
   const [showDancerEditModal, setShowDancerEditModal] = useState(false);
   const [showDancerAddModal, setShowDancerAddModal] = useState(false);
@@ -78,6 +76,7 @@ export default function Home() {
   const [teachers, setTeachers] = useState(Array.from(mockTeachers));
   const [genres, setGenres] = useState(Array.from(mockGenres));
   const [levels, setLevels] = useState<Level[]>([]);
+  const [selectedLevelIds, setSelectedLevelIds] = useState<string[]>([]);
 
   useEffect(() => {
     const loadMetaData = async () => {
@@ -214,26 +213,6 @@ export default function Home() {
   
   // Conflict detection
   const { conflicts, showConflictModal, checkConflicts, resolveConflicts, dismissConflicts } = useConflictDetection();
-
-  // Get conflicts for display in sidebar
-  const getConflictsForDisplay = () => {
-    const conflictList: Array<{dancer: string, routines: string[], time: string}> = [];
-    
-    scheduledRoutines.forEach(routine => {
-      const routineConflicts = findConflicts(scheduledRoutines, routine, rooms);
-      if (routineConflicts.length > 0) {
-        routineConflicts.forEach(conflict => {
-          conflictList.push({
-            dancer: conflict.dancerName,
-            routines: conflict.conflictingRoutines.map(cr => `${cr.routineTitle} (${cr.studioName})`),
-            time: formatTime(conflict.timeSlot.hour, conflict.timeSlot.minute)
-          });
-        });
-      }
-    });
-    
-    return conflictList;
-  };
 
   // Handlers
   const handleRoutineClick = useCallback((routine: Routine) => {
@@ -1070,11 +1049,7 @@ export default function Home() {
     setShowExportModal(true);
   }, []);
 
-  const handleSingleDayExport = useCallback(() => {
-    setShowSingleDayExportModal(true);
-  }, []);
-
-  const handleConfirmExport = useCallback((from: string, to: string) => {
+  const handleConfirmExport = useCallback((from: string, to: string, levelIds: string[] = []) => {
     // Build inclusive date range array
     const fromDate = new Date(from);
     const toDate = new Date(to);
@@ -1086,32 +1061,20 @@ export default function Home() {
     }
     
     // Filter scheduled routines by date range (based on sr.date which is YYYY-MM-DD)
-    const filtered = scheduledRoutines.filter(sr => sr.date >= from && sr.date <= to);
+    let filtered = scheduledRoutines.filter(sr => sr.date >= from && sr.date <= to);
+
+    // Filter by level if selected
+    if (levelIds.length > 0) {
+      filtered = filtered.filter(sr => {
+        if (!sr.routine?.level || !sr.routine.level.id) return false;
+        return levelIds.includes(sr.routine.level.id);
+      });
+    }
 
     import('./utils/pdfUtils').then(({ generateSchedulePDF }) => {
       generateSchedulePDF(filtered, dates, rooms);
     });
     setShowExportModal(false);
-  }, [scheduledRoutines, rooms]);
-
-  const handleConfirmSingleDayExport = useCallback((from: string, to: string) => {
-    // Build inclusive date range array
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
-    const dates: Date[] = [];
-    const cursor = new Date(fromDate);
-    while (cursor <= toDate) {
-      dates.push(new Date(cursor));
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    
-    // Filter scheduled routines by date range (based on sr.date which is YYYY-MM-DD)
-    const filtered = scheduledRoutines.filter(sr => sr.date >= from && sr.date <= to);
-
-    import('./utils/pdfUtils').then(({ generateSchedulePDF }) => {
-      generateSchedulePDF(filtered, dates, rooms);
-    });
-    setShowSingleDayExportModal(false);
   }, [scheduledRoutines, rooms]);
 
   const handleImportDancers = useCallback(async (importedDancers: Dancer[]) => {
@@ -1376,6 +1339,8 @@ export default function Home() {
                   onSaveChanges={handleSaveScheduleChanges}
                   onResizeRoutineDuration={(routine, minutes) => handleUpdateScheduledRoutineDuration(routine.id, minutes)}
                   levels={levels}
+                  selectedLevelIds={selectedLevelIds}
+                  onLevelIdsChange={setSelectedLevelIds}
                 />
               )}
         </div>
@@ -1390,9 +1355,7 @@ export default function Home() {
             onRoomConfigChange={handleRoomConfigChange}
                 onEmailSchedule={handleEmailSchedule}
                 onExportSchedule={handleExportSchedule}
-                onSingleDayExport={handleSingleDayExport}
                 onShowDancers={handleShowDancers}
-                conflicts={getConflictsForDisplay()}
           />
         </div>
 
@@ -1495,12 +1458,6 @@ export default function Home() {
           isOpen={showExportModal}
           onClose={() => setShowExportModal(false)}
           onExport={handleConfirmExport}
-        />
-
-        <SingleDayExportModal
-          isOpen={showSingleDayExportModal}
-          onClose={() => setShowSingleDayExportModal(false)}
-          onExport={handleConfirmSingleDayExport}
         />
 
         {pendingScheduleRoutine && pendingScheduleTimeSlot && (

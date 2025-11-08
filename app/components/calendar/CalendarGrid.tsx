@@ -8,7 +8,7 @@ import { TimeSlot } from './TimeSlot';
 import { ScheduledBlock } from './ScheduledBlock';
 import { formatTime, getShortDayName, addMinutesToTime } from '../../utils/timeUtils';
 import { findConflicts } from '../../utils/conflictUtils';
-import { ChevronLeft, ChevronRight, Calendar, Save, AlertCircle, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Save, AlertCircle, X, ChevronDown } from 'lucide-react';
 
 interface CalendarGridProps {
   rooms: Room[];
@@ -22,6 +22,8 @@ interface CalendarGridProps {
   onSaveChanges?: () => void;
   onResizeRoutineDuration?: (routine: ScheduledRoutine, newDuration: number) => void;
   levels?: Level[];
+  selectedLevelIds?: string[];
+  onLevelIdsChange?: (levelIds: string[]) => void;
 }
 
 type ViewMode = 'day' | '4days' | 'week' | 'month';
@@ -37,22 +39,27 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   hasUnsavedChanges = false,
   onSaveChanges,
   onResizeRoutineDuration,
-  levels = []
+  levels = [],
+  selectedLevelIds = [],
+  onLevelIdsChange
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('4days');
-  const [startHour, setStartHour] = useState(9);
-  const [endHour, setEndHour] = useState(21);
+  const [startHour, setStartHour] = useState(6);
+  const [endHour, setEndHour] = useState(24);
   const [timeInterval, setTimeInterval] = useState(30);
-  const [selectedLevelId, setSelectedLevelId] = useState<string>('all');
+  const [showLevelDropdown, setShowLevelDropdown] = useState(false);
 
-  // Filter scheduled routines by selected level
+  // Filter scheduled routines by selected levels (if provided)
   const filteredScheduledRoutines = useMemo(() => {
-    if (selectedLevelId === 'all') {
+    if (!selectedLevelIds || selectedLevelIds.length === 0) {
       return scheduledRoutines;
     }
-    return scheduledRoutines.filter(sr => sr.routine.level?.id === selectedLevelId);
-  }, [scheduledRoutines, selectedLevelId]);
+    return scheduledRoutines.filter(sr => {
+      if (!sr.routine?.level || !sr.routine.level.id) return false;
+      return selectedLevelIds.includes(sr.routine.level.id);
+    });
+  }, [scheduledRoutines, selectedLevelIds]);
 
   const getDatesForView = (date: Date, view: ViewMode): Date[] => {
     const dates: Date[] = [];
@@ -329,24 +336,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               </button>
             </div>
             
-            {/* Level Filter */}
-            {levels.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-gray-600" />
-                <select
-                  value={selectedLevelId}
-                  onChange={(e) => setSelectedLevelId(e.target.value)}
-                  className="px-3 py-1 border border-gray-300 rounded text-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Levels</option>
-                  {levels.map(level => (
-                    <option key={level.id} value={level.id}>
-                      {level.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
             
             {viewMode !== 'month' && (
             <div className="flex items-center gap-2">
@@ -374,6 +363,104 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 <option value={30}>30 min</option>
                 <option value={60}>1 hour</option>
               </select>
+
+              {/* Level Filter */}
+              {levels.length > 0 && onLevelIdsChange && (
+                <div className="relative" style={{ zIndex: 1000 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowLevelDropdown(!showLevelDropdown)}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-left flex items-center gap-1 min-h-[28px]"
+                  >
+                    <span className="text-gray-600">
+                      {selectedLevelIds.length === 0
+                        ? 'All Levels'
+                        : selectedLevelIds.length <= 2
+                        ? selectedLevelIds
+                            .map((levelId) => {
+                              const level = levels.find((l) => l.id === levelId);
+                              return level ? level.name : null;
+                            })
+                            .filter(Boolean)
+                            .join(', ')
+                        : `${selectedLevelIds.length} selected`}
+                    </span>
+                    <ChevronDown
+                      className={`w-3 h-3 text-gray-400 transition-transform ${
+                        showLevelDropdown ? "transform rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {showLevelDropdown && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setShowLevelDropdown(false)}
+                      />
+                      <div className="absolute right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto min-w-[200px]" style={{ zIndex: 1001 }}>
+                        {levels.length === 0 ? (
+                          <div className="p-3 text-sm text-gray-500">
+                            No levels available
+                          </div>
+                        ) : (
+                          <>
+                            <label className="flex items-center py-2 px-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 sticky top-0 bg-white">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  selectedLevelIds.length === levels.length &&
+                                  levels.length > 0
+                                }
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    onLevelIdsChange(levels.map((l) => l.id));
+                                  } else {
+                                    onLevelIdsChange([]);
+                                  }
+                                }}
+                                className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-xs font-medium text-gray-700">
+                                Select All
+                              </span>
+                            </label>
+                            {levels.map((level) => (
+                              <label
+                                key={level.id}
+                                className="flex items-center py-2 px-3 hover:bg-gray-50 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedLevelIds.includes(level.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      onLevelIdsChange([
+                                        ...selectedLevelIds,
+                                        level.id,
+                                      ]);
+                                    } else {
+                                      onLevelIdsChange(
+                                        selectedLevelIds.filter(
+                                          (id) => id !== level.id
+                                        )
+                                      );
+                                    }
+                                  }}
+                                  className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-xs text-gray-700">
+                                  {level.name}
+                                </span>
+                              </label>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             )}
           </div>
@@ -387,7 +474,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         minHeight: '400px',
         height: 'calc(100vh - 300px)',
         overflowX: 'auto',
-        overflowY: 'scroll'
+        overflowY: 'scroll',
+        position: 'relative',
+        zIndex: 1
       }}>
         <div className="min-w-max bg-gray-50" style={{ minWidth: 'max-content' }}>
           {/* Days Header */}

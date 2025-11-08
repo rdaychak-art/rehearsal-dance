@@ -189,7 +189,7 @@ function buildTeacherEmailText(
   return `Hi ${teacherName},${customMsg}Here are your rehearsal schedules for ${rangeLabel}:\n\n${lines}\n\nSincerely, Performing Dance Arts.`;
 }
 
-async function sendWithSendGrid(
+async function sendWithMilerLite(
   toEmail: string,
   toName: string,
   subject: string,
@@ -199,51 +199,73 @@ async function sendWithSendGrid(
 ): Promise<{ success: boolean; error?: string; duration: number }> {
   const sendStartTime = Date.now();
   const MAX_RETRIES = 2;
-  const RETRY_DELAY = 1000; // 1 second delay between retries
+  const BASE_RETRY_DELAY = 1000; // Base delay: 1 second
+  const REQUEST_TIMEOUT = 20000; // 20 seconds per request (reduced from 30s to avoid timeouts)
+  
+  // Exponential backoff: delay increases with each retry
+  const RETRY_DELAY = BASE_RETRY_DELAY * Math.pow(2, retryCount);
 
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const defaultFromEmail = process.env.SENDGRID_FROM_EMAIL;
+  // MilerLite configuration from environment variables
+  const apiKey = process.env.MILERLITE_API_KEY;
+  const apiUrl = process.env.MILERLITE_API_URL || 'https://api.milerlite.com/v1/send'; // Default URL, can be overridden
+  const defaultFromEmail = process.env.MILERLITE_FROM_EMAIL || process.env.SENDGRID_FROM_EMAIL; // Fallback for migration
   const fromEmail = customFromEmail || defaultFromEmail;
-  const fromName = process.env.SENDGRID_FROM_NAME || "Dance Studio";
+  const fromName = process.env.MILERLITE_FROM_NAME || process.env.SENDGRID_FROM_NAME || "Dance Studio";
 
   if (!apiKey || !fromEmail) {
     const error =
-      "Missing SENDGRID_API_KEY or SENDGRID_FROM_EMAIL environment variables";
+      "Missing MILERLITE_API_KEY or MILERLITE_FROM_EMAIL environment variables";
     console.error(
       `[EMAIL API] [${toName} <${toEmail}>] Configuration error: ${error}`
     );
     return { success: false, error, duration: Date.now() - sendStartTime };
   }
 
+  // MilerLite API payload structure
+  // NOTE: Adjust this payload structure based on MilerLite's actual API documentation
+  // Common email API patterns include:
+  // - Simple: { to, from, subject, text }
+  // - With personalizations: { personalizations: [{ to, subject }], from, content }
+  // - Custom format: Check MilerLite API docs for exact structure
   const payload = {
-    personalizations: [
-      {
-        to: [{ email: toEmail, name: toName }],
-        subject,
-      },
-    ],
-    from: { email: fromEmail, name: fromName },
-    content: [{ type: "text/plain", value: text }],
+    to: toEmail,
+    toName: toName,
+    from: fromEmail,
+    fromName: fromName,
+    subject: subject,
+    text: text,
+    // TODO: Add any additional MilerLite-specific fields based on their API documentation
+    // Examples might include: html, attachments, tags, metadata, etc.
   };
 
   try {
     console.log(
-      `[EMAIL API] [${toName} <${toEmail}>] Attempting to send email (attempt ${
+      `[EMAIL API] [${toName} <${toEmail}>] Attempting to send email via MilerLite (attempt ${
         retryCount + 1
       }/${MAX_RETRIES + 1})...`
     );
+    console.log(
+      `[EMAIL API] [${toName} <${toEmail}>] MilerLite API call: to=${toEmail}, from=${fromEmail}, subject="${subject}", textLength=${text.length}`
+    );
 
-    // Create abort controller for timeout (30 seconds per request)
+    // Create abort controller for timeout (20 seconds per request to avoid timeouts)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      console.warn(
+        `[EMAIL API] [${toName} <${toEmail}>] Request timeout after ${REQUEST_TIMEOUT}ms`
+      );
+    }, REQUEST_TIMEOUT);
 
     let resp: Response;
     try {
-      resp = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      resp = await fetch(apiUrl, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          "Authorization": `Bearer ${apiKey}`, // TODO: Adjust auth header format if MilerLite uses different authentication (e.g., "X-API-Key", "Api-Key", etc.)
           "Content-Type": "application/json",
+          // TODO: Add any additional MilerLite-specific headers based on their API documentation
+          // Examples might include: "X-MilerLite-Version", custom headers, etc.
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
@@ -256,17 +278,18 @@ async function sendWithSendGrid(
 
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "Unknown error");
+      const errorDetails = `MilerLite API error ${resp.status}: ${errText}`;
 
-      // Retry on certain status codes
+      // Retry on certain status codes (429 = rate limit, 5xx = server errors)
       if (
         retryCount < MAX_RETRIES &&
         (resp.status === 429 || resp.status >= 500)
       ) {
         console.warn(
-          `[EMAIL API] [${toName} <${toEmail}>] SendGrid API error (${resp.status}), retrying in ${RETRY_DELAY}ms... Error: ${errText}`
+          `[EMAIL API] [${toName} <${toEmail}>] ${errorDetails}, retrying in ${RETRY_DELAY}ms (exponential backoff)...`
         );
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-        return sendWithSendGrid(
+        return sendWithMilerLite(
           toEmail,
           toName,
           subject,
@@ -276,16 +299,24 @@ async function sendWithSendGrid(
         );
       }
 
-      const error = `SendGrid error ${resp.status}: ${errText}`;
+      const error = errorDetails;
       console.error(
         `[EMAIL API] [${toName} <${toEmail}>] Failed after ${sendDuration}ms: ${error}`
       );
       return { success: false, error, duration: sendDuration };
     }
 
+    // Parse response if needed
+    const responseData = await resp.json().catch(() => ({}));
     console.log(
-      `[EMAIL API] [${toName} <${toEmail}>] ✓ Email sent successfully (${sendDuration}ms)`
+      `[EMAIL API] [${toName} <${toEmail}>] ✓ Email sent successfully via MilerLite (${sendDuration}ms, status: ${resp.status})`
     );
+    if (Object.keys(responseData).length > 0) {
+      console.log(
+        `[EMAIL API] [${toName} <${toEmail}>] MilerLite response:`,
+        JSON.stringify(responseData)
+      );
+    }
     return { success: true, duration: sendDuration };
   } catch (error: unknown) {
     const sendDuration = Date.now() - sendStartTime;
@@ -295,23 +326,25 @@ async function sendWithSendGrid(
       errorMessage = error.message;
       // Check for abort/timeout errors
       if (error.name === "AbortError" || errorMessage.includes("aborted")) {
-        errorMessage = "Request timeout (30s)";
+        errorMessage = `Request timeout (${REQUEST_TIMEOUT / 1000}s)`;
       }
     }
 
-    // Retry on network errors or timeouts
+    // Retry on network errors or timeouts with exponential backoff
     const isRetryable =
       errorMessage.includes("timeout") ||
       errorMessage.includes("network") ||
       errorMessage.includes("aborted") ||
+      errorMessage.includes("ECONNRESET") ||
+      errorMessage.includes("ETIMEDOUT") ||
       (error instanceof Error && error.name === "AbortError");
 
     if (retryCount < MAX_RETRIES && isRetryable) {
       console.warn(
-        `[EMAIL API] [${toName} <${toEmail}>] Network/timeout error, retrying in ${RETRY_DELAY}ms... Error: ${errorMessage}`
+        `[EMAIL API] [${toName} <${toEmail}>] Network/timeout error, retrying in ${RETRY_DELAY}ms (exponential backoff)... Error: ${errorMessage}`
       );
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-      return sendWithSendGrid(
+      return sendWithMilerLite(
         toEmail,
         toName,
         subject,
@@ -585,8 +618,8 @@ export async function POST(req: NextRequest) {
 
           // Process dancers in parallel batches
           // Reduced batch size to prevent rate limiting and timeout issues
-          const BATCH_SIZE = 5; // Process 5 emails concurrently to avoid rate limits
-          const BATCH_DELAY = 500; // 500ms delay between batches to prevent overwhelming SendGrid
+          const BATCH_SIZE = 5; // Process 5 emails concurrently to avoid rate limits and timeouts
+          const BATCH_DELAY = 500; // 500ms delay between batches to prevent overwhelming MilerLite API
           let processedCount = 0;
           console.log(
             `[EMAIL API] ===== Starting Dancer Email Processing =====`
@@ -693,7 +726,7 @@ export async function POST(req: NextRequest) {
             const emailResults = await Promise.all(
               emailAddresses.map(async (email) => {
                 const emailStartTime = Date.now();
-                const result = await sendWithSendGrid(
+                const result = await sendWithMilerLite(
                   email,
                   dancer.name,
                   subject,
@@ -1098,7 +1131,7 @@ export async function POST(req: NextRequest) {
                 customMessage
               );
 
-              const result = await sendWithSendGrid(
+              const result = await sendWithMilerLite(
                 teacher.email,
                 teacher.name,
                 teacherSubject,

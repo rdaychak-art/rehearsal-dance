@@ -21,6 +21,7 @@ import { CsvImportModal } from './components/modals/CsvImportModal';
 import { DancerEditModal } from './components/modals/DancerEditModal';
 import { DancerAddModal } from './components/modals/DancerAddModal';
 import { ExportScheduleModal } from './components/modals/ExportScheduleModal';
+import { SingleDayExportModal } from './components/modals/SingleDayExportModal';
 import { ScheduleOptionsModal } from './components/modals/ScheduleOptionsModal';
 import { LoadingOverlay } from './components/common/LoadingOverlay';
 
@@ -65,6 +66,7 @@ export default function Home() {
   const [showScheduledDancersModal, setShowScheduledDancersModal] = useState(false);
   const [showCsvImportModal, setShowCsvImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showSingleDayExportModal, setShowSingleDayExportModal] = useState(false);
   const [selectedDancer, setSelectedDancer] = useState<Dancer | null>(null);
   const [showDancerEditModal, setShowDancerEditModal] = useState(false);
   const [showDancerAddModal, setShowDancerAddModal] = useState(false);
@@ -1068,6 +1070,10 @@ export default function Home() {
     setShowExportModal(true);
   }, []);
 
+  const handleSingleDayExport = useCallback(() => {
+    setShowSingleDayExportModal(true);
+  }, []);
+
   const handleConfirmExport = useCallback((from: string, to: string) => {
     // Build inclusive date range array
     const fromDate = new Date(from);
@@ -1083,10 +1089,30 @@ export default function Home() {
     const filtered = scheduledRoutines.filter(sr => sr.date >= from && sr.date <= to);
 
     import('./utils/pdfUtils').then(({ generateSchedulePDF }) => {
-      generateSchedulePDF(filtered, dates);
+      generateSchedulePDF(filtered, dates, rooms);
     });
     setShowExportModal(false);
-  }, [scheduledRoutines]);
+  }, [scheduledRoutines, rooms]);
+
+  const handleConfirmSingleDayExport = useCallback((from: string, to: string) => {
+    // Build inclusive date range array
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    const dates: Date[] = [];
+    const cursor = new Date(fromDate);
+    while (cursor <= toDate) {
+      dates.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    
+    // Filter scheduled routines by date range (based on sr.date which is YYYY-MM-DD)
+    const filtered = scheduledRoutines.filter(sr => sr.date >= from && sr.date <= to);
+
+    import('./utils/pdfUtils').then(({ generateSchedulePDF }) => {
+      generateSchedulePDF(filtered, dates, rooms);
+    });
+    setShowSingleDayExportModal(false);
+  }, [scheduledRoutines, rooms]);
 
   const handleImportDancers = useCallback(async (importedDancers: Dancer[]) => {
     try {
@@ -1364,6 +1390,7 @@ export default function Home() {
             onRoomConfigChange={handleRoomConfigChange}
                 onEmailSchedule={handleEmailSchedule}
                 onExportSchedule={handleExportSchedule}
+                onSingleDayExport={handleSingleDayExport}
                 onShowDancers={handleShowDancers}
                 conflicts={getConflictsForDisplay()}
           />
@@ -1468,6 +1495,12 @@ export default function Home() {
           isOpen={showExportModal}
           onClose={() => setShowExportModal(false)}
           onExport={handleConfirmExport}
+        />
+
+        <SingleDayExportModal
+          isOpen={showSingleDayExportModal}
+          onClose={() => setShowSingleDayExportModal(false)}
+          onExport={handleConfirmSingleDayExport}
         />
 
         {pendingScheduleRoutine && pendingScheduleTimeSlot && (

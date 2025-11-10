@@ -8,7 +8,7 @@ import { TimeSlot } from './TimeSlot';
 import { ScheduledBlock } from './ScheduledBlock';
 import { formatTime, getShortDayName, addMinutesToTime } from '../../utils/timeUtils';
 import { findConflicts } from '../../utils/conflictUtils';
-import { ChevronLeft, ChevronRight, Calendar, Save, AlertCircle, X, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Save, AlertCircle, ChevronDown } from 'lucide-react';
 
 interface CalendarGridProps {
   rooms: Room[];
@@ -87,10 +87,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         break;
       }
       case 'week': {
-        // Week starting from Sunday
+        // Week starting from Monday
         const baseDate = normalizeDate(date);
         const dayOfWeek = baseDate.getDay();
-        const diff = baseDate.getDate() - dayOfWeek;
+        const diff = baseDate.getDate() - ((dayOfWeek + 6) % 7);
         const start = new Date(baseDate.getFullYear(), baseDate.getMonth(), diff, 0, 0, 0, 0);
         
         for (let i = 0; i < 7; i++) {

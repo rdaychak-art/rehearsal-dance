@@ -2,6 +2,44 @@ import { ScheduledRoutine } from '../types/schedule';
 import { Room } from '../types/room';
 import { formatTime } from './timeUtils';
 
+const DEFAULT_HEX_COLOR = '#3B82F6';
+
+const normalizeHexColor = (color?: string): string | null => {
+  if (!color) return null;
+  const trimmed = color.trim();
+  if (!/^#?[0-9A-Fa-f]{3}$|^#?[0-9A-Fa-f]{6}$/.test(trimmed)) return null;
+
+  const withoutHash = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+  if (withoutHash.length === 3) {
+    const r = withoutHash[0];
+    const g = withoutHash[1];
+    const b = withoutHash[2];
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+
+  return `#${withoutHash.toUpperCase()}`;
+};
+
+const hexToRgba = (hex: string, alpha: number): string => {
+  const sanitized = normalizeHexColor(hex) ?? DEFAULT_HEX_COLOR;
+  const r = parseInt(sanitized.slice(1, 3), 16);
+  const g = parseInt(sanitized.slice(3, 5), 16);
+  const b = parseInt(sanitized.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const getRoutineColorStyles = (routine: ScheduledRoutine) => {
+  const baseHex =
+    normalizeHexColor(routine.routine.level?.color || routine.routine.color) ??
+    DEFAULT_HEX_COLOR;
+
+  return {
+    borderColor: baseHex,
+    backgroundColor: hexToRgba(baseHex, 0.18),
+    titleColor: baseHex,
+  };
+};
+
 export const generateSchedulePDF = (scheduledRoutines: ScheduledRoutine[], rangeDates: Date[], rooms?: Room[]) => {
   // Create a simple HTML document for PDF generation
   const htmlContent = generateScheduleHTML(scheduledRoutines, rangeDates, rooms);
@@ -64,6 +102,21 @@ const generateScheduleHTML = (scheduledRoutines: ScheduledRoutine[], rangeDates:
         th { background: #F3F4F6; text-align: left; color: #374151; }
         tbody tr:nth-child(even) { background: #FAFAFA; }
         .muted { color: #6B7280; }
+        .level-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 8px;
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          border-radius: 9999px;
+          background: var(--badge-bg, #E5E7EB);
+          border: 1px solid var(--badge-border, #D1D5DB);
+          color: var(--badge-text, #374151);
+          white-space: nowrap;
+        }
         @media print { body { margin: 0; padding: 12px; } }
       </style>
     </head>
@@ -81,22 +134,31 @@ const generateScheduleHTML = (scheduledRoutines: ScheduledRoutine[], rangeDates:
             <th style="width: 90px;">End</th>
             <th style="width: 120px;">Room</th>
             <th>Routine</th>
+            <th style="width: 140px;">Level</th>
             <th style="width: 160px;">Teacher</th>
             <th>Dancers</th>
           </tr>
         </thead>
         <tbody>
-          ${sorted.map(r => `
+          ${sorted.map(r => {
+            const styles = getRoutineColorStyles(r);
+            const levelBadge = r.routine.level
+              ? `<span class="level-badge" style="--badge-bg: ${styles.backgroundColor}; --badge-border: ${styles.borderColor}; --badge-text: ${styles.titleColor};">${r.routine.level.name}</span>`
+              : '<span class="level-badge">N/A</span>';
+
+            return `
             <tr>
               <td>${parseLocalDate(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' })}</td>
               <td>${formatTime(r.startTime.hour, r.startTime.minute)}</td>
               <td>${formatTime(r.endTime.hour, r.endTime.minute)}</td>
               <td>${r.roomId}</td>
               <td>${r.routine.songTitle}</td>
+              <td>${levelBadge}</td>
               <td>${r.routine.teacher.name}</td>
               <td class="muted">${r.routine.dancers.map(d => d.name).join(', ')}</td>
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
         </tbody>
       </table>
 
@@ -213,17 +275,25 @@ const generateMultiDayCalendarGridHTML = (scheduledRoutines: ScheduledRoutine[],
           padding: 2px 4px;
           margin: 0;
           border-radius: 3px;
-          background: #EFF6FF;
-          border-left: 2px solid #3B82F6;
+          background: var(--routine-bg, #EFF6FF);
+          border-left: 2px solid var(--routine-border, #3B82F6);
           width: 100%;
           box-sizing: border-box;
           min-height: fit-content;
           height: 100%;
         }
+        .routine-level {
+          font-weight: 600;
+          font-size: 8px;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: var(--routine-title, #1E40AF);
+          margin-bottom: 2px;
+        }
         .routine-title { 
           font-weight: 600; 
           font-size: 10px; 
-          color: #1E40AF;
+          color: var(--routine-title, #1E40AF);
           margin-bottom: 2px;
           line-height: 1.2;
           word-wrap: break-word;
@@ -457,10 +527,16 @@ const generateCalendarGridBody = (scheduledRoutines: ScheduledRoutine[], date: D
                 if (cellData && cellData.routine) {
                   // Render routine
                   const { routine, rowSpan } = cellData;
+                  const styles = getRoutineColorStyles(routine);
                   const dancerNames = routine.routine.dancers.map(d => d.name).join(', ');
                   return `
                     <div class="room-cell occupied" style="grid-row: span ${rowSpan};">
-                      <div class="routine-block">
+                      <div class="routine-block" style="--routine-bg: ${styles.backgroundColor}; --routine-border: ${styles.borderColor}; --routine-title: ${styles.titleColor};">
+                        ${
+                          routine.routine.level
+                            ? `<div class="routine-level">${routine.routine.level.name}</div>`
+                            : ''
+                        }
                         <div class="routine-title">${routine.routine.songTitle}</div>
                         <div class="routine-time">${formatTime(routine.startTime.hour, routine.startTime.minute)} - ${formatTime(routine.endTime.hour, routine.endTime.minute)}</div>
                         <div class="routine-teacher">${routine.routine.teacher.name}</div>

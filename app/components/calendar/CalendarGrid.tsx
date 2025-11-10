@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Room } from '../../types/room';
 import { ScheduledRoutine } from '../../types/schedule';
 import { Routine, Level } from '../../types/routine';
@@ -24,6 +24,7 @@ interface CalendarGridProps {
   levels?: Level[];
   selectedLevelIds?: string[];
   onLevelIdsChange?: (levelIds: string[]) => void;
+  onViewDatesChange?: (startDate: Date, endDate: Date) => void;
 }
 
 type ViewMode = 'day' | '4days' | 'week' | 'month';
@@ -41,7 +42,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   onResizeRoutineDuration,
   levels = [],
   selectedLevelIds = [],
-  onLevelIdsChange
+  onLevelIdsChange,
+  onViewDatesChange
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('4days');
@@ -127,6 +129,15 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
   const viewDates = getDatesForView(currentDate, viewMode);
   const activeRooms = rooms.filter(room => room.isActive).slice(0, visibleRooms);
+  
+  // Notify parent of view date changes
+  useEffect(() => {
+    if (onViewDatesChange && viewDates.length > 0) {
+      const startDate = viewDates[0];
+      const endDate = viewDates[viewDates.length - 1];
+      onViewDatesChange(startDate, endDate);
+    }
+  }, [viewDates, onViewDatesChange]);
   
   // Use filtered routines for display
   const displayRoutines = filteredScheduledRoutines;

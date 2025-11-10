@@ -8,17 +8,30 @@ interface ExportScheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
   onExport: (from: string, to: string, levelIds: string[]) => void;
+  initialFromDate?: string;
+  initialToDate?: string;
 }
 
-export const ExportScheduleModal: React.FC<ExportScheduleModalProps> = ({ isOpen, onClose, onExport }) => {
+export const ExportScheduleModal: React.FC<ExportScheduleModalProps> = ({ isOpen, onClose, onExport, initialFromDate, initialToDate }) => {
   const today = new Date();
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
   const endOfWeek = new Date(startOfWeek);
   endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-  const [fromDate, setFromDate] = React.useState<string>(startOfWeek.toISOString().split('T')[0]);
-  const [toDate, setToDate] = React.useState<string>(endOfWeek.toISOString().split('T')[0]);
+  // Helper to format date as YYYY-MM-DD
+  const formatDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const defaultFromDate = initialFromDate || formatDateString(startOfWeek);
+  const defaultToDate = initialToDate || formatDateString(endOfWeek);
+
+  const [fromDate, setFromDate] = React.useState<string>(defaultFromDate);
+  const [toDate, setToDate] = React.useState<string>(defaultToDate);
   const [levels, setLevels] = React.useState<Level[]>([]);
   const [selectedLevelIds, setSelectedLevelIds] = React.useState<string[]>([]);
   const [showLevelDropdown, setShowLevelDropdown] = React.useState(false);
@@ -27,6 +40,18 @@ export const ExportScheduleModal: React.FC<ExportScheduleModalProps> = ({ isOpen
     // Ensure from is not after to
     if (fromDate > toDate) setToDate(fromDate);
   }, [fromDate, toDate]);
+
+  React.useEffect(() => {
+    // Update dates when initial dates change (when modal opens with new view dates)
+    if (isOpen) {
+      if (initialFromDate) {
+        setFromDate(initialFromDate);
+      }
+      if (initialToDate) {
+        setToDate(initialToDate);
+      }
+    }
+  }, [isOpen, initialFromDate, initialToDate]);
 
   React.useEffect(() => {
     const loadLevels = async () => {

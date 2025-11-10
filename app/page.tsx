@@ -77,6 +77,8 @@ export default function Home() {
   const [genres, setGenres] = useState(Array.from(mockGenres));
   const [levels, setLevels] = useState<Level[]>([]);
   const [selectedLevelIds, setSelectedLevelIds] = useState<string[]>([]);
+  const [currentViewStartDate, setCurrentViewStartDate] = useState<Date | null>(null);
+  const [currentViewEndDate, setCurrentViewEndDate] = useState<Date | null>(null);
 
   useEffect(() => {
     const loadMetaData = async () => {
@@ -1341,6 +1343,10 @@ export default function Home() {
                   levels={levels}
                   selectedLevelIds={selectedLevelIds}
                   onLevelIdsChange={setSelectedLevelIds}
+                  onViewDatesChange={(startDate, endDate) => {
+                    setCurrentViewStartDate(startDate);
+                    setCurrentViewEndDate(endDate);
+                  }}
                 />
               )}
         </div>
@@ -1458,6 +1464,18 @@ export default function Home() {
           isOpen={showExportModal}
           onClose={() => setShowExportModal(false)}
           onExport={handleConfirmExport}
+          initialFromDate={currentViewStartDate ? (() => {
+            const year = currentViewStartDate.getFullYear();
+            const month = String(currentViewStartDate.getMonth() + 1).padStart(2, '0');
+            const day = String(currentViewStartDate.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+          })() : undefined}
+          initialToDate={currentViewEndDate ? (() => {
+            const year = currentViewEndDate.getFullYear();
+            const month = String(currentViewEndDate.getMonth() + 1).padStart(2, '0');
+            const day = String(currentViewEndDate.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+          })() : undefined}
         />
 
         {pendingScheduleRoutine && pendingScheduleTimeSlot && (

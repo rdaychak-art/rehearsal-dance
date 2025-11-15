@@ -377,7 +377,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
               {/* Level Filter */}
               {levels.length > 0 && onLevelIdsChange && (
-                <div className="relative" style={{ zIndex: 1000 }}>
+                <div className="relative z-10">
                   <button
                     type="button"
                     onClick={() => setShowLevelDropdown(!showLevelDropdown)}
@@ -406,10 +406,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                   {showLevelDropdown && (
                     <>
                       <div
-                        className="fixed inset-0 z-10"
+                        className="fixed inset-0 z-[5]"
                         onClick={() => setShowLevelDropdown(false)}
                       />
-                      <div className="absolute right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto min-w-[200px]" style={{ zIndex: 1001 }}>
+                      <div className="absolute right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto min-w-[200px] z-20">
                         {levels.length === 0 ? (
                           <div className="p-3 text-sm text-gray-500">
                             No levels available

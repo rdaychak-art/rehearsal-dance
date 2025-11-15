@@ -108,23 +108,17 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
 
     // Separate routines by status:
     // - Inactive: manually marked as inactive (only)
-    // - Active: not manually marked inactive, with 0-5 scheduled instances
-    // - Maxed: not manually marked inactive, with 6+ scheduled instances
-    const maxCount = 6;
+    // - Active: not manually marked inactive
     const activeRoutines: Routine[] = [];
-    const maxedRoutines: Routine[] = [];
     const inactiveRoutines: Routine[] = [];
 
     filtered.forEach(routine => {
-      const count = routineScheduledCounts[routine.id] || 0;
       const isManuallyInactive = routine.isInactive || false;
       
       // A routine is inactive only if manually marked as inactive
       // New routines with 0 scheduled instances are still considered active
       if (isManuallyInactive) {
         inactiveRoutines.push(routine);
-      } else if (count >= maxCount) {
-        maxedRoutines.push(routine);
       } else {
         activeRoutines.push(routine);
       }
@@ -138,15 +132,14 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
       };
       
       activeRoutines.sort(sortByTitle);
-      maxedRoutines.sort(sortByTitle);
       inactiveRoutines.sort(sortByTitle);
     }
 
     // If hideInactive is true, filter out inactive routines
     // Otherwise, show them at the bottom
     const routinesToShow = hideInactive 
-      ? [...activeRoutines, ...maxedRoutines]
-      : [...activeRoutines, ...maxedRoutines, ...inactiveRoutines];
+      ? [...activeRoutines]
+      : [...activeRoutines, ...inactiveRoutines];
 
     return routinesToShow;
   }, [routines, searchTerm, selectedGenre, selectedTeacher, selectedLevel, routineScheduledCounts, hideInactive, sortOrder]);
@@ -247,7 +240,6 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
             filteredAndSortedRoutines.map(routine => {
               const scheduledCount = routineScheduledCounts[routine.id] || 0;
               const scheduledHours = routineScheduledHours[routine.id] || 0;
-              const isMaxed = scheduledCount >= 6;
               const isManuallyInactive = routine.isInactive || false;
               // Only consider routines inactive if manually marked as inactive
               // Routines with 0 scheduled instances are still considered active
@@ -258,7 +250,7 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
                   routine={routine}
                   onClick={onRoutineClick}
                   onToggleInactive={onToggleInactive}
-                  isMaxed={isMaxed}
+                  scheduledCount={scheduledCount}
                   scheduledHours={scheduledHours}
                   isInactive={isInactive}
                 />

@@ -645,14 +645,6 @@ export default function Home() {
       toast.success(`${routine.songTitle} scheduled recurring for ${scheduledRoutinesToCreate.length} week(s).`, {
         duration: 4000,
       });
-    } else {
-      // Show notification if routine has reached 6 scheduled times
-      if (newCount === 6) {
-        toast.success(`${routine.songTitle} has been scheduled 6 times and is now maxed out.`, {
-          duration: 4000,
-          icon: '🔔',
-        });
-      }
     }
     
     // Close modal and clear pending state
@@ -836,14 +828,6 @@ export default function Home() {
           ? { ...r, scheduledHours: r.scheduledHours + (pendingRoutine.duration / 60) }
           : r
       ));
-      }
-      
-      // Show notification if routine has reached 6 scheduled times
-      if (newCount === 6) {
-        toast.success(`${pendingRoutine.songTitle} has been scheduled 6 times and is now maxed out.`, {
-          duration: 4000,
-          icon: '🔔',
-        });
       }
       
       console.log('Pending routine added (not saved to database yet)');

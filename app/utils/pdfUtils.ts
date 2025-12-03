@@ -169,34 +169,50 @@ const generateScheduleHTML = (scheduledRoutines: ScheduledRoutine[], rangeDates:
 };
 
 const generateMultiDayCalendarGridHTML = (scheduledRoutines: ScheduledRoutine[], rangeDates: Date[], rooms: Room[]) => {
-  // Group routines by date
-  const routinesByDate = new Map<string, ScheduledRoutine[]>();
-  scheduledRoutines.forEach(routine => {
-    if (!routinesByDate.has(routine.date)) {
-      routinesByDate.set(routine.date, []);
-    }
-    routinesByDate.get(routine.date)!.push(routine);
+  // Filter out any invalid routines (defensive check)
+  const validRoutines = scheduledRoutines.filter(routine => {
+    return routine && 
+           routine.date && 
+           routine.roomId && 
+           routine.routine && 
+           routine.startTime && 
+           routine.endTime &&
+           typeof routine.date === 'string' &&
+           routine.date.match(/^\d{4}-\d{2}-\d{2}$/); // Ensure date is in YYYY-MM-DD format
   });
 
-  // Get unique dates that have schedules, sorted
-  const datesWithSchedules = Array.from(routinesByDate.keys())
-    .sort()
-    .map(dateStr => {
-      const [y, m, d] = dateStr.split('-').map(Number);
-      return new Date(y, m - 1, d);
-    });
+  // Group routines by date
+  const routinesByDate = new Map<string, ScheduledRoutine[]>();
+  validRoutines.forEach(routine => {
+    // Normalize date string to ensure consistent format
+    const normalizedDate = routine.date.trim();
+    if (!routinesByDate.has(normalizedDate)) {
+      routinesByDate.set(normalizedDate, []);
+    }
+    routinesByDate.get(normalizedDate)!.push(routine);
+  });
+
+  // Get unique dates that have schedules, sorted (keep as strings to avoid timezone issues)
+  const datesWithSchedules = Array.from(routinesByDate.keys()).sort();
 
   // Generate one page per day (only for days with schedules)
-  const dayPages = datesWithSchedules.map(date => {
-    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const dayPages = datesWithSchedules.map(dateStr => {
+    // Parse the date string to create a Date object for display
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    // Use the original date string as the key to ensure we get the correct routines
     const dayRoutines = routinesByDate.get(dateStr) || [];
     return generateCalendarGridBody(dayRoutines, date, rooms);
   });
 
   // Combine all day pages with page breaks
+  const formatDateString = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
   const dateLabel = datesWithSchedules.length === 1
-    ? datesWithSchedules[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', weekday: 'long' }).toUpperCase()
-    : `${datesWithSchedules[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${datesWithSchedules[datesWithSchedules.length - 1].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    ? formatDateString(datesWithSchedules[0]).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', weekday: 'long' }).toUpperCase()
+    : `${formatDateString(datesWithSchedules[0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${formatDateString(datesWithSchedules[datesWithSchedules.length - 1]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
   return `
     <!DOCTYPE html>
@@ -354,6 +370,17 @@ const generateMultiDayCalendarGridHTML = (scheduledRoutines: ScheduledRoutine[],
 };
 
 const generateCalendarGridBody = (scheduledRoutines: ScheduledRoutine[], date: Date, rooms: Room[]): string => {
+  // Filter out invalid routines (defensive check)
+  const validRoutines = scheduledRoutines.filter(sr => {
+    return sr && 
+           sr.routine && 
+           sr.roomId && 
+           sr.startTime && 
+           sr.endTime &&
+           sr.date &&
+           rooms.some(r => r.id === sr.roomId); // Ensure room exists
+  });
+
   // Show all active rooms, not just rooms with schedules
   // This ensures all studios are visible even if they have no schedules for the day
   const activeRooms = rooms
@@ -363,11 +390,13 @@ const generateCalendarGridBody = (scheduledRoutines: ScheduledRoutine[], date: D
   // Find time range for the day
   let minHour = 24;
   let maxHour = 0;
-  scheduledRoutines.forEach(sr => {
-    const startMin = sr.startTime.hour * 60 + sr.startTime.minute;
-    const endMin = sr.endTime.hour * 60 + sr.endTime.minute;
-    minHour = Math.min(minHour, Math.floor(startMin / 60));
-    maxHour = Math.max(maxHour, Math.ceil(endMin / 60));
+  validRoutines.forEach(sr => {
+    if (sr.startTime && sr.endTime) {
+      const startMin = sr.startTime.hour * 60 + sr.startTime.minute;
+      const endMin = sr.endTime.hour * 60 + sr.endTime.minute;
+      minHour = Math.min(minHour, Math.floor(startMin / 60));
+      maxHour = Math.max(maxHour, Math.ceil(endMin / 60));
+    }
   });
 
   // Default to 9 AM - 9 PM if no routines
@@ -404,7 +433,7 @@ const generateCalendarGridBody = (scheduledRoutines: ScheduledRoutine[], date: D
   const cellMap = new Map<string, { routine: ScheduledRoutine; rowSpan: number } | null>();
   
   // First, find all routines and determine which time slot row they should start in
-  scheduledRoutines.forEach(routine => {
+  validRoutines.forEach(routine => {
     const routineStart = routine.startTime.hour * 60 + routine.startTime.minute;
     
     // Find the first time slot that contains or starts before the routine start time

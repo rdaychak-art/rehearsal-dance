@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -79,6 +79,19 @@ export default function Home() {
   const [selectedLevelIds, setSelectedLevelIds] = useState<string[]>([]);
   const [currentViewStartDate, setCurrentViewStartDate] = useState<Date | null>(null);
   const [currentViewEndDate, setCurrentViewEndDate] = useState<Date | null>(null);
+
+  // Ref to always have the latest scheduledRoutines for export (avoids stale closure issues)
+  const scheduledRoutinesRef = useRef<ScheduledRoutine[]>([]);
+  const roomsRef = useRef<Room[]>(mockRooms);
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    scheduledRoutinesRef.current = scheduledRoutines;
+  }, [scheduledRoutines]);
+  
+  useEffect(() => {
+    roomsRef.current = rooms;
+  }, [rooms]);
 
   useEffect(() => {
     const loadMetaData = async () => {
@@ -1063,32 +1076,53 @@ export default function Home() {
   }, []);
 
   const handleConfirmExport = useCallback((from: string, to: string, levelIds: string[] = []) => {
-    // Build inclusive date range array
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
-    const dates: Date[] = [];
-    const cursor = new Date(fromDate);
-    while (cursor <= toDate) {
-      dates.push(new Date(cursor));
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    
-    // Filter scheduled routines by date range (based on sr.date which is YYYY-MM-DD)
-    let filtered = scheduledRoutines.filter(sr => sr.date >= from && sr.date <= to);
-
-    // Filter by level if selected
-    if (levelIds.length > 0) {
-      filtered = filtered.filter(sr => {
-        if (!sr.routine?.level || !sr.routine.level.id) return false;
-        return levelIds.includes(sr.routine.level.id);
+    // Use requestAnimationFrame to ensure we get the latest state after React has finished batching updates
+    requestAnimationFrame(() => {
+      // Build inclusive date range array
+      const fromDate = new Date(from);
+      const toDate = new Date(to);
+      const dates: Date[] = [];
+      const cursor = new Date(fromDate);
+      while (cursor <= toDate) {
+        dates.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      
+      // Use ref to get the latest scheduledRoutines (avoids stale closure issues)
+      const latestScheduledRoutines = scheduledRoutinesRef.current;
+      const latestRooms = roomsRef.current;
+      
+      // Filter scheduled routines by date range (based on sr.date which is YYYY-MM-DD)
+      let filtered = latestScheduledRoutines.filter(sr => {
+        // Ensure the routine data is complete (check for routine, level, etc.)
+        if (!sr.routine) return false;
+        return sr.date >= from && sr.date <= to;
       });
-    }
 
-    import('./utils/pdfUtils').then(({ generateSchedulePDF }) => {
-      generateSchedulePDF(filtered, dates, rooms);
+      // Filter by level if selected (matching the calendar view filtering logic)
+      if (levelIds.length > 0) {
+        filtered = filtered.filter(sr => {
+          if (!sr.routine?.level || !sr.routine.level.id) return false;
+          return levelIds.includes(sr.routine.level.id);
+        });
+      }
+
+      // Additional validation: ensure all routines have complete data
+      filtered = filtered.filter(sr => {
+        return sr.routine && 
+               sr.routine.teacher && 
+               sr.roomId && 
+               sr.date && 
+               sr.startTime && 
+               sr.endTime;
+      });
+
+      import('./utils/pdfUtils').then(({ generateSchedulePDF }) => {
+        generateSchedulePDF(filtered, dates, latestRooms);
+      });
     });
     setShowExportModal(false);
-  }, [scheduledRoutines, rooms]);
+  }, []);
 
   const handleImportDancers = useCallback(async (importedDancers: Dancer[]) => {
     try {

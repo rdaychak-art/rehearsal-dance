@@ -83,10 +83,15 @@ export default function Home() {
   // Ref to always have the latest scheduledRoutines for export (avoids stale closure issues)
   const scheduledRoutinesRef = useRef<ScheduledRoutine[]>([]);
   const roomsRef = useRef<Room[]>(mockRooms);
+  // Store a getter function to access latest state (for fallback in export)
+  const scheduledRoutinesGetterRef = useRef<() => ScheduledRoutine[]>(() => []);
   
   // Keep refs in sync with state
   useEffect(() => {
     scheduledRoutinesRef.current = scheduledRoutines;
+    // Update getter to always return latest state from ref (which is always updated)
+    // This ensures the getter always reads the current ref value, not a closure
+    scheduledRoutinesGetterRef.current = () => scheduledRoutinesRef.current;
   }, [scheduledRoutines]);
   
   useEffect(() => {
@@ -634,14 +639,13 @@ export default function Home() {
     // No conflicts, add all schedules
     console.log(`Adding ${scheduledRoutinesToCreate.length} scheduled routine(s) to schedule`);
     
-    // Count how many times this routine is already scheduled
-    const currentCount = scheduledRoutines.filter(sr => sr.routineId === routine.id).length;
-    const newCount = currentCount + scheduledRoutinesToCreate.length;
-    
     // Add all to state (don't save to database yet)
     setScheduledRoutines(prev => {
       const updated = [...prev, ...scheduledRoutinesToCreate];
       console.log('Updated scheduled routines:', updated.length);
+      // Update ref immediately to ensure export has latest data
+      // The getter reads from ref, so it will automatically get the latest value
+      scheduledRoutinesRef.current = updated;
       return updated;
     });
     
@@ -817,20 +821,22 @@ export default function Home() {
     
     if (pendingScheduledRoutine && pendingRoutine) {
       console.log('Adding pending routine after conflict resolution');
-      
-      // Count how many times this routine is already scheduled
-      const currentCount = scheduledRoutines.filter(sr => sr.routineId === pendingRoutine.id).length;
-      const newCount = currentCount + 1;
-      
+            
       // Apply pending: if it's an existing routine being moved, replace; else add
       setScheduledRoutines(prev => {
         const existsIndex = prev.findIndex(sr => sr.id === pendingScheduledRoutine.id);
+        let updated;
         if (existsIndex !== -1) {
           const copy = [...prev];
           copy[existsIndex] = pendingScheduledRoutine;
-          return copy;
+          updated = copy;
+        } else {
+          updated = [...prev, pendingScheduledRoutine];
         }
-        return [...prev, pendingScheduledRoutine];
+        // Update ref immediately to ensure export has latest data
+        // The getter reads from ref, so it will automatically get the latest value
+        scheduledRoutinesRef.current = updated;
+        return updated;
       });
       
       // Update routine's scheduled hours (temporary) only if it was a new add (not a move)
@@ -1076,53 +1082,114 @@ export default function Home() {
   }, []);
 
   const handleConfirmExport = useCallback((from: string, to: string, levelIds: string[] = []) => {
-    // Use requestAnimationFrame to ensure we get the latest state after React has finished batching updates
+    // Use double requestAnimationFrame + setTimeout to ensure we get the latest state
+    // after React has finished batching all updates and effects have run
     requestAnimationFrame(() => {
-      // Build inclusive date range array
-      const fromDate = new Date(from);
-      const toDate = new Date(to);
-      const dates: Date[] = [];
-      const cursor = new Date(fromDate);
-      while (cursor <= toDate) {
-        dates.push(new Date(cursor));
-        cursor.setDate(cursor.getDate() + 1);
-      }
-      
-      // Use ref to get the latest scheduledRoutines (avoids stale closure issues)
-      const latestScheduledRoutines = scheduledRoutinesRef.current;
-      const latestRooms = roomsRef.current;
+      requestAnimationFrame(() => {
+        // Small additional delay to ensure all state updates and effects are complete
+        setTimeout(() => {
+          // Build inclusive date range array (date-only, no timezone)
+          // Parse dates as local dates to avoid timezone shifts
+          const parseLocalDate = (dateStr: string): Date => {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            return new Date(y, (m || 1) - 1, d || 1);
+          };
+          
+          const fromDate = parseLocalDate(from);
+          const toDate = parseLocalDate(to);
+          const dates: Date[] = [];
+          const cursor = new Date(fromDate);
+          while (cursor <= toDate) {
+            dates.push(new Date(cursor));
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          
+          // Get latest data - ref is updated immediately when state changes
+          // The getter reads from ref, ensuring we always get the latest value
+          const stateGetter = scheduledRoutinesGetterRef.current;
+          const latestScheduledRoutines = stateGetter();
+          const latestRooms = roomsRef.current;
+          
+          // Verify we have data
+          if (latestScheduledRoutines.length === 0) {
+            console.warn('Export: No scheduled routines found - this may indicate a timing issue');
+          }
+          
+          // Debug: Log what we're exporting
+          console.log('Export: Using', latestScheduledRoutines.length, 'scheduled routines from ref (via getter)');
       
       // Filter scheduled routines by date range (based on sr.date which is YYYY-MM-DD)
+      // Use string comparison since dates are in YYYY-MM-DD format
       let filtered = latestScheduledRoutines.filter(sr => {
-        // Ensure the routine data is complete (check for routine, level, etc.)
-        if (!sr.routine) return false;
-        return sr.date >= from && sr.date <= to;
+        // Ensure the routine data exists
+        if (!sr || !sr.routine) {
+          console.warn('Export: Skipping schedule with missing routine data', sr);
+          return false;
+        }
+        // Ensure date is valid
+        if (!sr.date || typeof sr.date !== 'string') {
+          console.warn('Export: Skipping schedule with invalid date', sr);
+          return false;
+        }
+        // Date range filter using string comparison (YYYY-MM-DD format)
+        const dateMatch = sr.date >= from && sr.date <= to;
+        if (!dateMatch) {
+          console.debug(`Export: Schedule ${sr.id} date ${sr.date} outside range ${from} to ${to}`);
+        }
+        return dateMatch;
       });
+      
+      console.log(`Export: After date filter (${from} to ${to}): ${filtered.length} schedules`);
 
       // Filter by level if selected (matching the calendar view filtering logic)
       if (levelIds.length > 0) {
+        const beforeLevelFilter = filtered.length;
         filtered = filtered.filter(sr => {
-          if (!sr.routine?.level || !sr.routine.level.id) return false;
+          if (!sr.routine?.level || !sr.routine.level.id) {
+            // Routines without levels are excluded when level filter is active
+            return false;
+          }
           return levelIds.includes(sr.routine.level.id);
         });
+        console.log(`Export: After level filter (${levelIds.length} levels): ${filtered.length} schedules (was ${beforeLevelFilter})`);
       }
 
-      // Additional validation: ensure all routines have complete data
+      // Additional validation: ensure all routines have essential data
+      // Note: teacher is optional in some cases, so we only check for critical fields
+      const beforeValidation = filtered.length;
       filtered = filtered.filter(sr => {
-        return sr.routine && 
-               sr.routine.teacher && 
-               sr.roomId && 
-               sr.date && 
-               sr.startTime && 
-               sr.endTime;
+        const hasEssentialData = sr.routine && 
+                                 sr.roomId && 
+                                 sr.date && 
+                                 sr.startTime && 
+                                 sr.endTime;
+        if (!hasEssentialData) {
+          console.warn('Export: Skipping schedule with missing essential data', {
+            id: sr.id,
+            hasRoutine: !!sr.routine,
+            hasRoomId: !!sr.roomId,
+            hasDate: !!sr.date,
+            hasStartTime: !!sr.startTime,
+            hasEndTime: !!sr.endTime
+          });
+        }
+        return hasEssentialData;
       });
+      
+      if (beforeValidation !== filtered.length) {
+        console.warn(`Export: Validation removed ${beforeValidation - filtered.length} schedules with incomplete data`);
+      }
+      
+      console.log(`Export: Final count for PDF: ${filtered.length} schedules`);
 
-      import('./utils/pdfUtils').then(({ generateSchedulePDF }) => {
-        generateSchedulePDF(filtered, dates, latestRooms);
+          import('./utils/pdfUtils').then(({ generateSchedulePDF }) => {
+            generateSchedulePDF(filtered, dates, latestRooms);
+          });
+        }, 100); // Small delay to ensure all updates and effects are flushed
       });
     });
     setShowExportModal(false);
-  }, []);
+  }, []); // Empty deps - we use refs to avoid stale closures
 
   const handleImportDancers = useCallback(async (importedDancers: Dancer[]) => {
     try {

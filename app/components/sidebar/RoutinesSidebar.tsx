@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { Routine } from '../../types/routine';
 import { ScheduledRoutine } from '../../types/schedule';
 import { RoutineCard } from './RoutineCard';
-import { Search, Plus, Filter, ArrowUpAZ, ArrowDownAZ } from 'lucide-react';
+import { Search, Plus, Filter } from 'lucide-react';
 import { ManageTeachersModal } from '../modals/ManageTeachersModal';
 import { ManageGenresModal } from '../modals/ManageGenresModal';
 import { ManageLevelsModal } from '../modals/ManageLevelsModal';
@@ -142,19 +142,30 @@ export const RoutinesSidebar: React.FC<RoutinesSidebarProps> = ({
       : [...activeRoutines, ...inactiveRoutines];
 
     return routinesToShow;
-  }, [routines, searchTerm, selectedGenre, selectedTeacher, selectedLevel, routineScheduledCounts, hideInactive, sortOrder]);
+  }, [routines, searchTerm, selectedGenre, selectedTeacher, selectedLevel, hideInactive, sortOrder]);
 
   // Safety check: ensure routines is always an array before mapping
-  const uniqueGenres = Array.isArray(routines) ? Array.from(new Set(routines.map(r => r.genre.name))) : [];
-  const uniqueTeachers = Array.isArray(routines) ? Array.from(new Set(routines.map(r => r.teacher.name))) : [];
-  const uniqueLevels = Array.isArray(routines) ? Array.from(new Set(routines.filter(r => r.level).map(r => r.level!.name))) : [];
+  // Memoize to prevent recalculation on every render
+  const uniqueGenres = useMemo(() => {
+    return Array.isArray(routines) ? Array.from(new Set(routines.map(r => r.genre.name))) : [];
+  }, [routines]);
   
-  // Debug logging
-  console.log('Available genres:', uniqueGenres);
-  console.log('Available teachers:', uniqueTeachers);
-  console.log('Selected genre:', selectedGenre);
-  console.log('Selected teacher:', selectedTeacher);
-  console.log('Filtered routines count:', filteredAndSortedRoutines.length);
+  const uniqueTeachers = useMemo(() => {
+    return Array.isArray(routines) ? Array.from(new Set(routines.map(r => r.teacher.name))) : [];
+  }, [routines]);
+  
+  const uniqueLevels = useMemo(() => {
+    return Array.isArray(routines) ? Array.from(new Set(routines.filter(r => r.level).map(r => r.level!.name))) : [];
+  }, [routines]);
+  
+  // Debug logging - only log when values actually change
+  useEffect(() => {
+    console.log('Available genres:', uniqueGenres);
+    console.log('Available teachers:', uniqueTeachers);
+    console.log('Selected genre:', selectedGenre);
+    console.log('Selected teacher:', selectedTeacher);
+    console.log('Filtered routines count:', filteredAndSortedRoutines.length);
+  }, [uniqueGenres, uniqueTeachers, selectedGenre, selectedTeacher, filteredAndSortedRoutines.length]);
 
   return (
     <div className="w-80 bg-gray-50 border-r border-gray-200 flex flex-col h-screen">

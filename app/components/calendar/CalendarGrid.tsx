@@ -127,15 +127,30 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     return dates;
   };
 
-  const viewDates = getDatesForView(currentDate, viewMode);
-  const activeRooms = rooms.filter(room => room.isActive).slice(0, visibleRooms);
+  // Memoize viewDates to prevent unnecessary recalculations
+  const viewDates = useMemo(() => {
+    return getDatesForView(currentDate, viewMode);
+  }, [currentDate, viewMode]);
+  
+  // Memoize activeRooms to prevent unnecessary recalculations
+  const activeRooms = useMemo(() => {
+    return rooms.filter(room => room.isActive).slice(0, visibleRooms);
+  }, [rooms, visibleRooms]);
   
   // Notify parent of view date changes
+  // Use a ref to track previous dates to avoid infinite loops
+  const prevViewDatesRef = React.useRef<string>('');
   useEffect(() => {
     if (onViewDatesChange && viewDates.length > 0) {
       const startDate = viewDates[0];
       const endDate = viewDates[viewDates.length - 1];
-      onViewDatesChange(startDate, endDate);
+      // Create a stable key to compare dates
+      const datesKey = `${startDate.getTime()}-${endDate.getTime()}`;
+      // Only call if dates actually changed
+      if (prevViewDatesRef.current !== datesKey) {
+        prevViewDatesRef.current = datesKey;
+        onViewDatesChange(startDate, endDate);
+      }
     }
   }, [viewDates, onViewDatesChange]);
   
@@ -244,18 +259,23 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
   // hasConflicts helper removed (unused)
 
-  // Generate time slots
-  const timeSlots: Array<{ hour: number; minute: number }> = [];
-  for (let hour = startHour; hour < endHour; hour++) {
-    for (let minute = 0; minute < 60; minute += timeInterval) {
-      timeSlots.push({ hour, minute });
+  // Generate time slots - memoize to prevent recalculation on every render
+  const timeSlots = useMemo(() => {
+    const slots: Array<{ hour: number; minute: number }> = [];
+    for (let hour = startHour; hour < endHour; hour++) {
+      for (let minute = 0; minute < 60; minute += timeInterval) {
+        slots.push({ hour, minute });
+      }
     }
-  }
+    return slots;
+  }, [startHour, endHour, timeInterval]);
   
-  // Add some extra content to ensure scrolling
-  const totalTimeSlots = timeSlots.length;
-  console.log(`Generated ${totalTimeSlots} time slots from ${startHour}:00 to ${endHour}:00`);
-  console.log(`Calendar dimensions: ${activeRooms.length} rooms × 7 days = ${activeRooms.length * 7} columns`);
+  // Debug logging - only log when values actually change
+  useEffect(() => {
+    const totalTimeSlots = timeSlots.length;
+    console.log(`Generated ${totalTimeSlots} time slots from ${startHour}:00 to ${endHour}:00`);
+    console.log(`Calendar dimensions: ${activeRooms.length} rooms × ${viewDates.length} days = ${activeRooms.length * viewDates.length} columns`);
+  }, [timeSlots.length, startHour, endHour, activeRooms.length, viewDates.length]);
 
   return (
     <div className="flex-1 bg-white flex flex-col" style={{ height: '100%' }}>

@@ -42,7 +42,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   hasUnsavedChanges = false,
   onSaveChanges,
   onResizeRoutineDuration,
-  saveStatus = 'idle',
+  saveStatus = 'idle' as 'idle' | 'saving' | 'saved' | 'error',
   saveError = null,
   levels = [],
   selectedLevelIds = [],
@@ -337,7 +337,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                   <span className="text-sm font-medium">Save failed</span>
                 </div>
               )}
-              {hasUnsavedChanges && onSaveChanges && saveStatus !== 'saving' && (
+              {hasUnsavedChanges && onSaveChanges && (
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-orange-500" />
                   <button

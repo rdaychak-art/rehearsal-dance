@@ -8,7 +8,7 @@ import { TimeSlot } from './TimeSlot';
 import { ScheduledBlock } from './ScheduledBlock';
 import { formatTime, getShortDayName, addMinutesToTime } from '../../utils/timeUtils';
 import { findConflicts } from '../../utils/conflictUtils';
-import { ChevronLeft, ChevronRight, Calendar, Save, AlertCircle, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Save, AlertCircle, ChevronDown, CheckCircle2, Loader2, XCircle } from 'lucide-react';
 
 interface CalendarGridProps {
   rooms: Room[];
@@ -21,6 +21,8 @@ interface CalendarGridProps {
   hasUnsavedChanges?: boolean;
   onSaveChanges?: () => void;
   onResizeRoutineDuration?: (routine: ScheduledRoutine, newDuration: number) => void;
+  saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
+  saveError?: string | null;
   levels?: Level[];
   selectedLevelIds?: string[];
   onLevelIdsChange?: (levelIds: string[]) => void;
@@ -40,6 +42,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   hasUnsavedChanges = false,
   onSaveChanges,
   onResizeRoutineDuration,
+  saveStatus = 'idle',
+  saveError = null,
   levels = [],
   selectedLevelIds = [],
   onLevelIdsChange,
@@ -313,19 +317,40 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           </div>
           
           <div className="flex items-center gap-4">
-            {/* Save Changes Button */}
-            {hasUnsavedChanges && onSaveChanges && (
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-orange-500" />
-                <button
-                  onClick={onSaveChanges}
-                  className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                >
-                  <Save className="w-4 h-4" />
-                  Save Changes
-                </button>
-              </div>
-            )}
+            {/* Save Status Indicators */}
+            <div className="flex items-center gap-2">
+              {saveStatus === 'saving' && (
+                <div className="flex items-center gap-2 text-blue-600">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm font-medium">Saving...</span>
+                </div>
+              )}
+              {saveStatus === 'saved' && !hasUnsavedChanges && (
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span className="text-sm font-medium">Saved</span>
+                </div>
+              )}
+              {saveStatus === 'error' && (
+                <div className="flex items-center gap-2 text-red-600" title={saveError || 'Save failed'}>
+                  <XCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium">Save failed</span>
+                </div>
+              )}
+              {hasUnsavedChanges && onSaveChanges && saveStatus !== 'saving' && (
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-orange-500" />
+                  <button
+                    onClick={onSaveChanges}
+                    disabled={saveStatus === 'saving'}
+                    className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save Changes
+                  </button>
+                </div>
+              )}
+            </div>
             
             <div className="text-sm text-gray-600">
               {formatDateRange()}

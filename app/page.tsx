@@ -55,6 +55,8 @@ export default function Home() {
   const [isSavingRoutine, setIsSavingRoutine] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [isTogglingInactive, setIsTogglingInactive] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
   
   // Modal states
   const [selectedRoutine, setSelectedRoutine] = useState<Routine | null>(null);
@@ -236,6 +238,67 @@ export default function Home() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
+
+  // Backup to localStorage whenever scheduledRoutines changes
+  useEffect(() => {
+    if (isLoading) return;
+    
+    try {
+      if (hasUnsavedChanges && scheduledRoutines.length > 0) {
+        const backup = {
+          scheduledRoutines,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('rehearsal-unsaved-schedule', JSON.stringify(backup));
+      } else {
+        // Clear backup if no unsaved changes
+        localStorage.removeItem('rehearsal-unsaved-schedule');
+      }
+    } catch (e) {
+      console.warn('Failed to backup to localStorage:', e);
+    }
+  }, [scheduledRoutines, hasUnsavedChanges, isLoading]);
+
+  // Check for unsaved changes in localStorage on mount
+  useEffect(() => {
+    if (isLoading) return;
+
+    try {
+      const backupStr = localStorage.getItem('rehearsal-unsaved-schedule');
+      if (backupStr) {
+        const backup = JSON.parse(backupStr);
+        const backupAge = Date.now() - backup.timestamp;
+        const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+        if (backupAge < maxAge && backup.scheduledRoutines && backup.scheduledRoutines.length > 0) {
+          const shouldRestore = window.confirm(
+            `Found unsaved schedule changes from ${new Date(backup.timestamp).toLocaleString()}.\n\n` +
+            `Would you like to restore them?`
+          );
+
+          if (shouldRestore) {
+            console.log('Restoring unsaved schedule from localStorage');
+            setScheduledRoutines(backup.scheduledRoutines);
+            scheduledRoutinesRef.current = backup.scheduledRoutines;
+            setHasUnsavedChanges(true);
+            toast.success('Unsaved changes restored');
+          } else {
+            // Clear backup if user doesn't want to restore
+            localStorage.removeItem('rehearsal-unsaved-schedule');
+          }
+        } else if (backupAge >= maxAge) {
+          // Clear old backups
+          localStorage.removeItem('rehearsal-unsaved-schedule');
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to check localStorage backup:', e);
+      // Clear corrupted backup
+      try {
+        localStorage.removeItem('rehearsal-unsaved-schedule');
+      } catch {}
+    }
+  }, [isLoading]);
 
   // Pending routine when conflicts are detected
   const [pendingScheduledRoutine, setPendingScheduledRoutine] = useState<ScheduledRoutine | null>(null);
@@ -879,18 +942,59 @@ export default function Home() {
     }
   }, [scheduledRoutines, pendingScheduledRoutine, pendingRoutine, pendingDurationChange, resolveConflicts]);
 
+  // Helper function to map API response to ScheduledRoutine format
+  const mapApiResponseToScheduledRoutine = useCallback((saved: {
+    id: string;
+    routineId: string;
+    routine: Routine;
+    roomId: string;
+    startMinutes: number;
+    duration: number;
+    date: string;
+  }): ScheduledRoutine => {
+    const startHour = Math.floor(saved.startMinutes / 60);
+    const startMinute = saved.startMinutes % 60;
+    const endMinutes = saved.startMinutes + saved.duration;
+    const endHour = Math.floor(endMinutes / 60);
+    const endMinute = endMinutes % 60;
+    const date = new Date(saved.date);
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+    const dayOfWeek = date.getUTCDay();
+    
+    return {
+      id: saved.id,
+      routineId: saved.routineId,
+      routine: saved.routine,
+      roomId: saved.roomId,
+      startTime: { hour: startHour, minute: startMinute, day: dayOfWeek },
+      endTime: { hour: endHour, minute: endMinute, day: dayOfWeek },
+      duration: saved.duration,
+      date: dateString
+    };
+  }, []);
+
   // Save all schedule changes to database
   const handleSaveScheduleChanges = useCallback(async () => {
     setIsSavingSchedule(true);
+    setSaveStatus('saving');
+    setSaveError(null);
+
+    // Capture current state at the start of save to avoid race conditions
+    const currentScheduledRoutines = scheduledRoutines;
+    const currentSavedRoutines = savedScheduledRoutines;
+
     try {
       // Find new routines (not in saved state)
-      const newRoutines = scheduledRoutines.filter(curr => 
-        !savedScheduledRoutines.some(saved => saved.id === curr.id)
+      const newRoutines = currentScheduledRoutines.filter(curr => 
+        !currentSavedRoutines.some(saved => saved.id === curr.id)
       );
 
       // Find updated routines (exists in both but changed)
-      const updatedRoutines = scheduledRoutines.filter(curr => {
-        const saved = savedScheduledRoutines.find(s => s.id === curr.id);
+      const updatedRoutines = currentScheduledRoutines.filter(curr => {
+        const saved = currentSavedRoutines.find(s => s.id === curr.id);
         if (!saved) return false;
         return (
           saved.roomId !== curr.roomId ||
@@ -902,156 +1006,243 @@ export default function Home() {
       });
 
       // Find deleted routines (in saved but not in current)
-      const deletedIds = savedScheduledRoutines
-        .filter(saved => !scheduledRoutines.some(curr => curr.id === saved.id))
+      const deletedIds = currentSavedRoutines
+        .filter(saved => !currentScheduledRoutines.some(curr => curr.id === saved.id))
         .map(s => s.id);
 
-      // Save all changes
-      const savePromises: Promise<ScheduledRoutine | Response>[] = [];
+      // Track results for error reporting
+      const saveResults: {
+        type: 'create' | 'update' | 'delete';
+        routine: ScheduledRoutine | string;
+        success: boolean;
+        error?: string;
+      }[] = [];
+
       const savedNewRoutines: ScheduledRoutine[] = [];
       const savedUpdatedRoutines: ScheduledRoutine[] = [];
 
       // Create new routines
       for (const routine of newRoutines) {
-        const startMinutes = routine.startTime.hour * 60 + routine.startTime.minute;
-        const promise = fetch('/api/scheduled', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            date: routine.date,
-            startMinutes,
-            duration: routine.duration,
-            routineId: routine.routineId,
-            roomId: routine.roomId,
-          }),
-        }).then(res => res.json()).then(saved => {
-          // Map saved data to ScheduledRoutine format
-          const startHour = Math.floor(saved.startMinutes / 60);
-          const startMinute = saved.startMinutes % 60;
-          const endMinutes = saved.startMinutes + saved.duration;
-          const endHour = Math.floor(endMinutes / 60);
-          const endMinute = endMinutes % 60;
-          const date = new Date(saved.date);
-          // Format date using UTC components to ensure consistent calendar date
-          const year = date.getUTCFullYear();
-          const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-          const day = String(date.getUTCDate()).padStart(2, '0');
-          const dateString = `${year}-${month}-${day}`;
-          // Use UTC components for day of week to avoid timezone shift
-          const dayOfWeek = date.getUTCDay();
-          
-          const savedScheduledRoutine: ScheduledRoutine = {
-            id: saved.id,
-            routineId: saved.routineId,
-            routine: saved.routine,
-            roomId: saved.roomId,
-            startTime: { hour: startHour, minute: startMinute, day: dayOfWeek },
-            endTime: { hour: endHour, minute: endMinute, day: dayOfWeek },
-            duration: saved.duration,
-            date: dateString
-          };
-          
+        try {
+          const startMinutes = routine.startTime.hour * 60 + routine.startTime.minute;
+          const res = await fetch('/api/scheduled', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              date: routine.date,
+              startMinutes,
+              duration: routine.duration,
+              routineId: routine.routineId,
+              roomId: routine.roomId,
+            }),
+          });
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+            throw new Error(errorData.error || `Failed to create schedule: ${res.status}`);
+          }
+
+          const saved = await res.json();
+          const savedScheduledRoutine = mapApiResponseToScheduledRoutine(saved);
           savedNewRoutines.push(savedScheduledRoutine);
-          return savedScheduledRoutine;
-        });
-        savePromises.push(promise);
+          saveResults.push({ type: 'create', routine: routine, success: true });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          saveResults.push({ 
+            type: 'create', 
+            routine: routine, 
+            success: false, 
+            error: errorMessage 
+          });
+        }
       }
 
       // Update existing routines
       for (const routine of updatedRoutines) {
-        const startMinutes = routine.startTime.hour * 60 + routine.startTime.minute;
-        const promise = fetch(`/api/scheduled/${routine.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            date: routine.date,
-            startMinutes,
-            duration: routine.duration,
-            routineId: routine.routineId,
-            roomId: routine.roomId,
-          }),
-        }).then(res => res.json()).then(saved => {
-          // Map saved data to ScheduledRoutine format
-          const startHour = Math.floor(saved.startMinutes / 60);
-          const startMinute = saved.startMinutes % 60;
-          const endMinutes = saved.startMinutes + saved.duration;
-          const endHour = Math.floor(endMinutes / 60);
-          const endMinute = endMinutes % 60;
-          const date = new Date(saved.date);
-          // Format date using UTC components to ensure consistent calendar date
-          const year = date.getUTCFullYear();
-          const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-          const day = String(date.getUTCDate()).padStart(2, '0');
-          const dateString = `${year}-${month}-${day}`;
-          // Use UTC components for day of week to avoid timezone shift
-          const dayOfWeek = date.getUTCDay();
-          
-          const savedScheduledRoutine: ScheduledRoutine = {
-            id: saved.id,
-            routineId: saved.routineId,
-            routine: saved.routine,
-            roomId: saved.roomId,
-            startTime: { hour: startHour, minute: startMinute, day: dayOfWeek },
-            endTime: { hour: endHour, minute: endMinute, day: dayOfWeek },
-            duration: saved.duration,
-            date: dateString
-          };
-          
+        try {
+          const startMinutes = routine.startTime.hour * 60 + routine.startTime.minute;
+          const res = await fetch(`/api/scheduled/${routine.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              date: routine.date,
+              startMinutes,
+              duration: routine.duration,
+              routineId: routine.routineId,
+              roomId: routine.roomId,
+            }),
+          });
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+            throw new Error(errorData.error || `Failed to update schedule: ${res.status}`);
+          }
+
+          const saved = await res.json();
+          const savedScheduledRoutine = mapApiResponseToScheduledRoutine(saved);
           savedUpdatedRoutines.push(savedScheduledRoutine);
-          return savedScheduledRoutine;
-        });
-        savePromises.push(promise);
+          saveResults.push({ type: 'update', routine: routine, success: true });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          saveResults.push({ 
+            type: 'update', 
+            routine: routine, 
+            success: false, 
+            error: errorMessage 
+          });
+        }
       }
 
       // Delete removed routines
       for (const id of deletedIds) {
-        savePromises.push(
-          fetch(`/api/scheduled/${id}`, {
+        try {
+          const res = await fetch(`/api/scheduled/${id}`, {
             method: 'DELETE',
-          })
-        );
+          });
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+            throw new Error(errorData.error || `Failed to delete schedule: ${res.status}`);
+          }
+
+          saveResults.push({ type: 'delete', routine: id, success: true });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          saveResults.push({ 
+            type: 'delete', 
+            routine: id, 
+            success: false, 
+            error: errorMessage 
+          });
+        }
       }
 
-      await Promise.all(savePromises);
-
-      // Update scheduledRoutines with new/updated IDs
-      const updatedScheduledRoutines = scheduledRoutines.map(curr => {
-        // First check if this routine was newly created
-        const matchingNew = savedNewRoutines.find(saved => {
-          // Match by routine ID, room, date, and time (for new routines with temp IDs)
-          return (curr.id.startsWith('scheduled-') || curr.id === saved.id) &&
-                 curr.routineId === saved.routineId &&
-                 curr.roomId === saved.roomId &&
-                 curr.date === saved.date &&
-                 curr.startTime.hour === saved.startTime.hour &&
-                 curr.startTime.minute === saved.startTime.minute;
+      // Check if all saves succeeded
+      const failedSaves = saveResults.filter(r => !r.success);
+      if (failedSaves.length > 0) {
+        const errorMessages = failedSaves.map(f => {
+          const routine = typeof f.routine === 'string' 
+            ? `Schedule ${f.routine}` 
+            : `${f.routine.routine.songTitle} on ${f.routine.date}`;
+          return `${routine}: ${f.error}`;
         });
-        if (matchingNew) return matchingNew;
-        
-        // Check if this routine was updated
-        const matchingUpdated = savedUpdatedRoutines.find(saved => saved.id === curr.id);
-        if (matchingUpdated) return matchingUpdated;
-        
-        // Otherwise keep as is
-        return curr;
-      });
+        const errorMsg = `Failed to save ${failedSaves.length} item(s):\n${errorMessages.join('\n')}`;
+        setSaveError(errorMsg);
+        setSaveStatus('error');
+        toast.error(`Some items failed to save. Check console for details.`);
+        console.error('Save failures:', failedSaves);
+        // Don't update state if there were failures - keep unsaved changes
+        return;
+      }
 
-      // Update saved state with updated routines
-      setScheduledRoutines(updatedScheduledRoutines);
-      scheduledRoutinesRef.current = updatedScheduledRoutines;
-      setSavedScheduledRoutines(updatedScheduledRoutines);
+      // All saves succeeded - update state using functional update to merge with any new items added during save
+      setScheduledRoutines(prev => {
+        // Build a map of saved items by their original temp ID or current ID for matching
+        const savedItemsMap = new Map<string, ScheduledRoutine>();
+        
+        // Map saved new routines by their matching criteria
+        savedNewRoutines.forEach(saved => {
+          // Find the original item in the captured state that matches this saved item
+          const original = currentScheduledRoutines.find(curr => {
+            const matchesTempId = curr.id.startsWith('scheduled-');
+            const matchesId = curr.id === saved.id;
+            const matchesRoutine = curr.routineId === saved.routineId;
+            const matchesRoom = curr.roomId === saved.roomId;
+            const matchesDate = curr.date === saved.date;
+            const matchesTime = curr.startTime.hour === saved.startTime.hour && 
+                               curr.startTime.minute === saved.startTime.minute;
+            
+            return (matchesTempId || matchesId) && matchesRoutine && matchesRoom && matchesDate && matchesTime;
+          });
+          
+          if (original) {
+            savedItemsMap.set(original.id, saved);
+          }
+          // Also map by the new saved ID
+          savedItemsMap.set(saved.id, saved);
+        });
+        
+        // Map saved updated routines
+        savedUpdatedRoutines.forEach(saved => {
+          savedItemsMap.set(saved.id, saved);
+        });
+        
+        // Build the updated list: merge saved items with any new items that were added during the save
+        const updated: ScheduledRoutine[] = [];
+        const processedIds = new Set<string>();
+        
+        // First, process items from the current state (prev) which includes any new items added during save
+        prev.forEach(curr => {
+          // Check if this item was saved (either new or updated)
+          const savedItem = savedItemsMap.get(curr.id);
+          
+          if (savedItem) {
+            // This item was saved, use the saved version
+            updated.push(savedItem);
+            processedIds.add(savedItem.id);
+          } else {
+            // Check if this is a new item that was added during the save (not in the captured state)
+            const wasInCapturedState = currentScheduledRoutines.some(captured => captured.id === curr.id);
+            
+            if (!wasInCapturedState) {
+              // This is a new item added during save, keep it
+              updated.push(curr);
+              processedIds.add(curr.id);
+            } else {
+              // This item was in captured state but wasn't saved (shouldn't happen, but keep it to be safe)
+              updated.push(curr);
+              processedIds.add(curr.id);
+            }
+          }
+        });
+        
+        // Also add any saved items that might not be in current state (shouldn't happen, but be safe)
+        savedNewRoutines.forEach(saved => {
+          if (!processedIds.has(saved.id)) {
+            updated.push(saved);
+          }
+        });
+        
+        savedUpdatedRoutines.forEach(saved => {
+          if (!processedIds.has(saved.id)) {
+            updated.push(saved);
+          }
+        });
+        
+        // Update ref and saved state
+        scheduledRoutinesRef.current = updated;
+        setSavedScheduledRoutines(updated);
+        
+        return updated;
+      });
+      
       setHasUnsavedChanges(false);
+      setSaveStatus('saved');
+      
+      // Clear localStorage backup on successful save
+      try {
+        localStorage.removeItem('rehearsal-unsaved-schedule');
+      } catch (e) {
+        console.warn('Failed to clear localStorage:', e);
+      }
 
       toast.success('Schedule changes saved successfully');
+      
+      // Reset save status after 2 seconds
+      setTimeout(() => {
+        setSaveStatus('idle');
+      }, 2000);
     } catch (e: unknown) {
       console.error('Failed to save schedule changes:', e);
       const errorMessage = e instanceof Error ? e.message : 'Failed to save schedule changes';
+      setSaveError(errorMessage);
+      setSaveStatus('error');
       toast.error(errorMessage);
     } finally {
       setIsSavingSchedule(false);
     }
-  }, [scheduledRoutines, savedScheduledRoutines]);
-  
+  }, [scheduledRoutines, savedScheduledRoutines, mapApiResponseToScheduledRoutine]);
+
   const handleDismissConflicts = useCallback(() => {
     // User clicked "Cancel" - don't apply the change, just clear pending state
     if (pendingDurationChange) {
@@ -1505,6 +1696,8 @@ export default function Home() {
                     setCurrentViewStartDate(startDate);
                     setCurrentViewEndDate(endDate);
                   }}
+                  saveStatus={saveStatus}
+                  saveError={saveError}
                 />
               )}
         </div>

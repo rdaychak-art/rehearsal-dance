@@ -87,6 +87,10 @@ export default function Home() {
   const roomsRef = useRef<Room[]>(mockRooms);
   // Store a getter function to access latest state (for fallback in export)
   const scheduledRoutinesGetterRef = useRef<() => ScheduledRoutine[]>(() => []);
+  // Ref to track save timer to debounce saves
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref to prevent saving during initial load
+  const isInitialLoadRef = useRef(true);
   
   // Keep refs in sync with state
   useEffect(() => {
@@ -181,6 +185,7 @@ export default function Home() {
         });
         setScheduledRoutines(mapped);
         setSavedScheduledRoutines(mapped); // Store saved state for comparison
+        isInitialLoadRef.current = false; // Mark initial load as complete
         
         // Load room count from settings
         if (settingsJson && settingsJson.visibleRooms) {
@@ -1021,43 +1026,32 @@ export default function Home() {
       const savedNewRoutines: ScheduledRoutine[] = [];
       const savedUpdatedRoutines: ScheduledRoutine[] = [];
 
-      // Create new routines
-      for (const routine of newRoutines) {
+      // IMPORTANT: Process deletes FIRST to free up slots before creating new schedules
+      // This prevents conflicts when replacing a schedule with a new one at the same slot
+      for (const id of deletedIds) {
         try {
-          const startMinutes = routine.startTime.hour * 60 + routine.startTime.minute;
-          const res = await fetch('/api/scheduled', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              date: routine.date,
-              startMinutes,
-              duration: routine.duration,
-              routineId: routine.routineId,
-              roomId: routine.roomId,
-            }),
+          const res = await fetch(`/api/scheduled/${id}`, {
+            method: 'DELETE',
           });
 
           if (!res.ok) {
             const errorData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-            throw new Error(errorData.error || `Failed to create schedule: ${res.status}`);
+            throw new Error(errorData.error || `Failed to delete schedule: ${res.status}`);
           }
 
-          const saved = await res.json();
-          const savedScheduledRoutine = mapApiResponseToScheduledRoutine(saved);
-          savedNewRoutines.push(savedScheduledRoutine);
-          saveResults.push({ type: 'create', routine: routine, success: true });
+          saveResults.push({ type: 'delete', routine: id, success: true });
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           saveResults.push({ 
-            type: 'create', 
-            routine: routine, 
+            type: 'delete', 
+            routine: id, 
             success: false, 
             error: errorMessage 
           });
         }
       }
 
-      // Update existing routines
+      // Update existing routines (before creates to free up slots from duration/time changes)
       for (const routine of updatedRoutines) {
         try {
           const startMinutes = routine.startTime.hour * 60 + routine.startTime.minute;
@@ -1093,24 +1087,36 @@ export default function Home() {
         }
       }
 
-      // Delete removed routines
-      for (const id of deletedIds) {
+      // Create new routines (after deletes and updates to avoid conflicts with freed slots)
+      for (const routine of newRoutines) {
         try {
-          const res = await fetch(`/api/scheduled/${id}`, {
-            method: 'DELETE',
+          const startMinutes = routine.startTime.hour * 60 + routine.startTime.minute;
+          const res = await fetch('/api/scheduled', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              date: routine.date,
+              startMinutes,
+              duration: routine.duration,
+              routineId: routine.routineId,
+              roomId: routine.roomId,
+            }),
           });
 
           if (!res.ok) {
             const errorData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-            throw new Error(errorData.error || `Failed to delete schedule: ${res.status}`);
+            throw new Error(errorData.error || `Failed to create schedule: ${res.status}`);
           }
 
-          saveResults.push({ type: 'delete', routine: id, success: true });
+          const saved = await res.json();
+          const savedScheduledRoutine = mapApiResponseToScheduledRoutine(saved);
+          savedNewRoutines.push(savedScheduledRoutine);
+          saveResults.push({ type: 'create', routine: routine, success: true });
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           saveResults.push({ 
-            type: 'delete', 
-            routine: id, 
+            type: 'create', 
+            routine: routine, 
             success: false, 
             error: errorMessage 
           });
@@ -1242,6 +1248,39 @@ export default function Home() {
       setIsSavingSchedule(false);
     }
   }, [scheduledRoutines, savedScheduledRoutines, mapApiResponseToScheduledRoutine]);
+
+  // Auto-save when there are unsaved changes (must be after handleSaveScheduleChanges is defined)
+  useEffect(() => {
+    // Skip on initial load
+    if (isInitialLoadRef.current) {
+      if (scheduledRoutines.length > 0 && savedScheduledRoutines.length > 0) {
+        isInitialLoadRef.current = false;
+      }
+      return;
+    }
+
+    // Only auto-save if there are changes and we're not already saving
+    if (hasUnsavedChanges && !isSavingSchedule && !isLoading) {
+      // Clear any existing timer
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+
+      // Set new save timer (500ms debounce)
+      saveTimerRef.current = setTimeout(() => {
+        console.log('Auto-saving schedule changes...');
+        handleSaveScheduleChanges();
+        saveTimerRef.current = null;
+      }, 500);
+    }
+
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, [hasUnsavedChanges, isSavingSchedule, isLoading, handleSaveScheduleChanges]);
 
   const handleDismissConflicts = useCallback(() => {
     // User clicked "Cancel" - don't apply the change, just clear pending state
@@ -1622,7 +1661,7 @@ export default function Home() {
               isSavingRoutine 
                 ? 'Saving routine...' 
                 : isSavingSchedule 
-                ? 'Saving schedule...' 
+                ? 'Saving schedule changes...' 
                 : 'Updating routine status...'
             } 
           />

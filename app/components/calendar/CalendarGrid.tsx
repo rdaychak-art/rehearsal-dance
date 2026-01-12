@@ -337,17 +337,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                   <span className="text-sm font-medium">Save failed</span>
                 </div>
               )}
-              {hasUnsavedChanges && onSaveChanges && (
+              {hasUnsavedChanges && saveStatus !== 'saving' && (
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-orange-500" />
-                  <button
-                    onClick={onSaveChanges}
-                    disabled={saveStatus === 'saving'}
-                    className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Save className="w-4 h-4" />
-                    Save Changes
-                  </button>
+                  <span className="text-sm text-gray-600">Saving...</span>
                 </div>
               )}
             </div>
